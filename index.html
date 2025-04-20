@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solar Defense</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="game-container">
+        <div id="hud">
+            <div id="credits">Credits: <span id="credits-value">0</span></div>
+            <div id="level">Level: <span id="level-value">1</span></div>
+            <div id="enemies-remaining">Enemies: <span id="enemies-value">0</span></div>
+        </div>
+        <div id="game-canvas"></div>
+        <div id="upgrade-panel">
+            <h2>Upgrades</h2>
+            <div class="upgrade-buttons">
+                <button id="auto-aim" data-cost="100">Auto Cannon Aiming (100)</button>
+                <button id="cannon-damage" data-cost="25">Cannon Damage +5% (25)</button>
+                <button id="cannon-range" data-cost="25">Cannon Range +5 (25)</button>
+                <button id="missile-launcher" data-cost="100">Missile Launcher (100)</button>
+                <button id="missile-damage" data-cost="25">Missile Damage +5% (25)</button>
+                <button id="missile-range" data-cost="25">Missile Range +5 (25)</button>
+                <button id="missile-target" data-cost="100">Missile Target Change (100)</button>
+                <button id="launch-bay" data-cost="100">Launch Bay (100)</button>
+            </div>
+            <div id="missile-targeting" class="hidden">
+                <h3>Missile Targeting</h3>
+                <select id="target-selection">
+                    <option value="closest">Closest</option>
+                    <option value="highest-health">Highest Health</option>
+                    <option value="farthest">Farthest</option>
+                    <option value="highest-armor">Highest Armor</option>
+                    <option value="lowest-armor">Lowest Armor</option>
+                </select>
+            </div>
+        </div>
+    </div>
+    <div id="start-screen">
+        <h1>Solar Defense</h1>
+        <p>Defend your planet from alien invaders!</p>
+        <button id="start-game">Start Game</button>
+    </div>
+    <div id="level-complete" class="hidden">
+        <h2>Level Complete!</h2>
+        <p>Get ready for the next wave...</p>
+        <button id="next-level">Continue</button>
+    </div>
+    <div id="game-over" class="hidden">
+        <h2>Game Over</h2>
+        <p>Your starbase has been destroyed!</p>
+        <button id="restart-game">Play Again</button>
+    </div>
+
+    <!-- Load Three.js from CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
+    
+    <!-- Load game scripts -->
+    <script src="js/config.js"></script>
+    <script src="js/entities.js"></script>
+    <script src="js/level.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/game.js"></script>
+</body>
+</html> 
