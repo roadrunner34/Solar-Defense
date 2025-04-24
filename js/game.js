@@ -1,7 +1,10 @@
 // Game initialization
 class Game {
     constructor() {
+        // Create scene
         this.scene = new THREE.Scene();
+        
+        // Create camera
         this.camera = new THREE.OrthographicCamera(
             window.innerWidth / -2,
             window.innerWidth / 2,
@@ -10,25 +13,26 @@ class Game {
             1,
             1000
         );
+        this.camera.position.z = 5;
         
+        // Create renderer
         this.renderer = new THREE.WebGLRenderer({
             canvas: document.getElementById('game-canvas'),
             antialias: true
         });
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.renderer.setClearColor(0x000000);
         
+        // Initialize game
         this.init();
     }
 
     init() {
-        // Set up renderer
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.renderer.setClearColor(0x000000);
-
-        // Position camera
-        this.camera.position.z = 5;
-
         // Create solar system background
         this.createSolarSystemBackground();
+
+        // Create starbase
+        this.starbase = new Starbase(this);
 
         // Handle window resize
         window.addEventListener('resize', () => this.onWindowResize(), false);
@@ -98,6 +102,12 @@ class Game {
 
     animate() {
         requestAnimationFrame(() => this.animate());
+        
+        // Update starbase
+        if (this.starbase) {
+            this.starbase.update();
+        }
+        
         this.renderer.render(this.scene, this.camera);
     }
 }
