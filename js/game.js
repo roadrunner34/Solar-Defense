@@ -23,6 +23,13 @@ class Game {
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.renderer.setClearColor(0x000000);
         
+        // Game state
+        this.gameObjects = [];
+        this.enemies = [];
+        this.projectiles = [];
+        this.score = 0;
+        this.credits = 0;
+        
         // Initialize game
         this.init();
     }
@@ -33,6 +40,7 @@ class Game {
 
         // Create starbase
         this.starbase = new Starbase(this);
+        this.gameObjects.push(this.starbase);
 
         // Handle window resize
         window.addEventListener('resize', () => this.onWindowResize(), false);
@@ -100,13 +108,25 @@ class Game {
         this.renderer.setSize(window.innerWidth, window.innerHeight);
     }
 
+    // Check for collisions between projectiles and enemies
+    checkCollisions() {
+        // This will be implemented when we add enemies
+        // For now, we'll just keep track of projectiles
+        this.projectiles = this.starbase.projectiles;
+    }
+
     animate() {
         requestAnimationFrame(() => this.animate());
         
-        // Update starbase
-        if (this.starbase) {
-            this.starbase.update();
+        // Update all game objects
+        for (const obj of this.gameObjects) {
+            if (obj.update) {
+                obj.update();
+            }
         }
+        
+        // Check for collisions
+        this.checkCollisions();
         
         this.renderer.render(this.scene, this.camera);
     }

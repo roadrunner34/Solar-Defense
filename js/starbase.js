@@ -5,6 +5,12 @@ class Starbase {
         this.rotation = 0;
         this.createStarbase();
         this.setupControls();
+        
+        // Shooting mechanics
+        this.lastShotTime = 0;
+        this.shotCooldown = 1000; // 1 second between shots (in milliseconds)
+        this.projectiles = [];
+        this.damage = 10;
     }
 
     createStarbase() {
@@ -93,8 +99,75 @@ class Starbase {
         });
     }
 
+    shoot() {
+        const currentTime = Date.now();
+        
+        // Check if enough time has passed since the last shot
+        if (currentTime - this.lastShotTime >= this.shotCooldown) {
+            // Calculate the position at the end of the cannon
+            const cannonLength = 40;
+            const angle = this.rotation + Math.PI / 2; // Adjust for the 90-degree offset
+            
+            // Calculate the position at the end of the cannon
+            const startX = this.body.position.x + Math.cos(angle) * cannonLength;
+            const startY = this.body.position.y + Math.sin(angle) * cannonLength;
+            
+            // Create a new projectile
+            const projectile = new Projectile(this.game, startX, startY, angle);
+            this.projectiles.push(projectile);
+            
+            // Update last shot time
+            this.lastShotTime = currentTime;
+            
+            // Create visual effect for shooting
+            this.createShootingEffect(startX, startY, angle);
+        }
+    }
+    
+    createShootingEffect(x, y, angle) {
+        // Create a flash effect
+        const flashGeometry = new THREE.CircleGeometry(5, 16);
+        const flashMaterial = new THREE.MeshBasicMaterial({
+            color: 0xffff00,
+            transparent: true,
+            opacity: 0.8
+        });
+        const flash = new THREE.Mesh(flashGeometry, flashMaterial);
+        flash.position.set(x, y, 0);
+        this.scene.add(flash);
+        
+        // Animate the flash
+        let opacity = 0.8;
+        const animateFlash = () => {
+            opacity -= 0.1;
+            flashMaterial.opacity = opacity;
+            
+            if (opacity > 0) {
+                requestAnimationFrame(animateFlash);
+            } else {
+                this.scene.remove(flash);
+            }
+        };
+        
+        animateFlash();
+    }
+
     update() {
         // Update starbase rotation using proper Three.js method
         this.body.rotation.z = this.rotation;
+        
+        // Auto-fire
+        this.shoot();
+        
+        // Update all projectiles
+        for (let i = this.projectiles.length - 1; i >= 0; i--) {
+            const projectile = this.projectiles[i];
+            projectile.update();
+            
+            // Remove inactive projectiles
+            if (!projectile.active) {
+                this.projectiles.splice(i, 1);
+            }
+        }
     }
 } 
