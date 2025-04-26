@@ -42,11 +42,17 @@ class Game {
         this.starbase = new Starbase(this);
         this.gameObjects.push(this.starbase);
 
+        // Create enemy spawner
+        this.enemySpawner = new EnemySpawner(this);
+
         // Handle window resize
         window.addEventListener('resize', () => this.onWindowResize(), false);
 
         // Start animation loop
         this.animate();
+
+        // Start spawning enemies (for testing)
+        this.startEnemySpawning();
     }
 
     createSolarSystemBackground() {
@@ -108,11 +114,36 @@ class Game {
         this.renderer.setSize(window.innerWidth, window.innerHeight);
     }
 
+    startEnemySpawning() {
+        // Spawn a new enemy every 2 seconds (for testing)
+        this.spawnInterval = setInterval(() => {
+            if (this.enemySpawner) {
+                this.enemySpawner.spawnEnemy();
+                console.log('Enemy spawned!'); // Debug log
+            }
+        }, 2000);
+    }
+
     // Check for collisions between projectiles and enemies
     checkCollisions() {
-        // This will be implemented when we add enemies
-        // For now, we'll just keep track of projectiles
+        // Update projectiles list
         this.projectiles = this.starbase.projectiles;
+
+        // Check each projectile against each enemy
+        for (const projectile of this.projectiles) {
+            for (const enemy of this.enemies) {
+                const distance = Math.sqrt(
+                    Math.pow(projectile.mesh.position.x - enemy.mesh.position.x, 2) +
+                    Math.pow(projectile.mesh.position.y - enemy.mesh.position.y, 2)
+                );
+                if (distance < enemy.properties.size) {
+                    // Collision detected
+                    enemy.takeDamage(10); // Base damage of 10
+                    projectile.destroy();
+                    break;
+                }
+            }
+        }
     }
 
     animate() {

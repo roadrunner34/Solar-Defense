@@ -1,6 +1,6 @@
 # Solar Defense Development Plan
 
-This document outlines the development plan for the Solar Defense game, a 2D top-down tower defense game set in space. We're following agile methodologies with small, incremental pieces of work.
+This document outlines the development plan for the Solar Defense game, a 2D top-down tower defense game set in space. We're following agile methodologies with small, incremental piecesd of work.
 
 ## Phase 1: Project Setup & Core Game Engine
 1. **Setup 2D environment**
