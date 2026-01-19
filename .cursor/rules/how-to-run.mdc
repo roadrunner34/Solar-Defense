@@ -4,3 +4,4 @@ globs:
 alwaysApply: true
 ---
 Ensure that after each set of changes, offer the instructions on how to run the code locally, and what the differences will be.
+And if there is a implementation plan, check off any tasks that are completed.
