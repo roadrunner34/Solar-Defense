@@ -4,10 +4,10 @@ overview: Build a browser-based tower defense game using Three.js in iterative s
 todos:
   - id: sprint-0-setup
     content: "Sprint 0: Project foundation and basic 3D scene"
-    status: pending
+    status: completed
   - id: sprint-1-mvp
     content: "Sprint 1: MVP - Core gameplay loop with starbase and enemies"
-    status: pending
+    status: completed
   - id: sprint-2-platforms
     content: "Sprint 2: Deployable platform system"
     status: pending
@@ -43,6 +43,19 @@ This plan follows an iterative sprint-based approach where each sprint delivers 
 - **Daily**: Quick playtests during development
 - **Sprint End**: Formal playtesting session with feedback forms
 - **Continuous**: Code reviews and pair programming opportunities
+
+---
+
+## Reality Check (Current Build vs Plan)
+
+This plan is a living document. The current codebase already includes:
+
+- [x] **Auto-targeting starbase** (classic tower-defense style: weapons aim/fire automatically)
+- [x] **Wave progression** (5 waves, wave announcements + wave summary)
+- [x] **Credits + score + accuracy tracking**
+- [x] **Three enemy types** (basic/fast/armored) with health bars + damage feedback
+
+Because of that, **Sprint 4 should be treated as “multi-level campaign + difficulty curve iteration”** (not “first time we add waves”).
 
 ---
 
@@ -93,12 +106,12 @@ This plan follows an iterative sprint-based approach where each sprint delivers 
 
 ### Definition of Done
 
-- [ ] Game loads in browser without errors
-- [ ] 3D scene renders with sun, planets, and asteroids
-- [ ] Camera can be rotated/zoomed
-- [ ] 60 FPS performance on target hardware
-- [ ] Code is organized in modules
-- [ ] README updated with setup instructions
+- [x] Game loads in browser without errors
+- [x] 3D scene renders with sun, planets, and asteroids
+- [x] Camera can be rotated/zoomed
+- [ ] 60 FPS performance on target hardware (verify on target devices)
+- [x] Code is organized in modules
+- [x] README updated with setup instructions
 
 ### Sprint Review Focus
 
@@ -126,7 +139,8 @@ This plan follows an iterative sprint-based approach where each sprint delivers 
 - **Win Condition**: Survive waves by killing all enemies in each wave
 - **Lose Condition**: Enemy reaches the planet (starbase destroyed)
 - **Economy**: Guaranteed starting credits + credits earned per enemy kill
-- **Enemy Behavior**: Enemies attack fighters (if fighter stations exist) but do NOT attack stations or weapon platforms
+- **Weapons**: Starbase (and later platforms) auto-target and auto-fire (tower defense core)
+- **Enemy Behavior (future feature)**: Enemies may attack fighters (if fighter stations exist) but do NOT attack stations or weapon platforms
 
 ### User Stories
 
@@ -160,14 +174,13 @@ This plan follows an iterative sprint-based approach where each sprint delivers 
 3. **Main Starbase** ([js/starbase.js](js/starbase.js))
 
    - Create starbase at scene center
-   - Player-controlled rotation (mouse/keyboard)
-   - Auto-fire system (1 shot/second)
+   - Auto-target closest enemy in range
+   - Auto-fire system (based on fire rate)
    - Visual cannon/weapon representation
 
 4. **Input Handling** ([js/input.js](js/input.js))
 
-   - Mouse movement controls starbase rotation
-   - Keyboard controls (arrow keys/WASD for rotation)
+   - Camera input (orbit + zoom)
    - Input state management
 
 5. **Combat System** ([js/projectile.js](js/projectile.js))
@@ -210,19 +223,18 @@ This plan follows an iterative sprint-based approach where each sprint delivers 
 
 ### Definition of Done
 
-- [ ] Player can rotate starbase with mouse/keyboard
-- [ ] Starbase auto-fires at 1 shot/second
-- [ ] Enemies spawn and follow path
-- [ ] Projectiles hit and destroy enemies
-- [ ] Win condition: All enemies killed = victory
-- [ ] Lose condition: Enemy reaches planet = defeat
-- [ ] Credits system works (starting credits + kill rewards)
-- [ ] Score system tracks kills and accuracy
-- [ ] Visual feedback on hits (damage numbers, effects)
-- [ ] Enemy health bars visible
-- [ ] Victory/defeat screens display correctly
-- [ ] Game is playable end-to-end (spawn → defend → win/lose)
-- [ ] No major bugs or crashes
+- [x] Starbase auto-targets enemies and fires automatically
+- [x] Enemies spawn and follow path
+- [x] Projectiles hit and destroy enemies
+- [x] Win condition: Clear all waves = victory
+- [x] Lose condition: Enemy reaches planet = defeat
+- [x] Credits system works (starting credits + kill rewards + wave bonuses)
+- [x] Score system tracks kills and accuracy
+- [x] Visual feedback on hits (damage numbers, hit effects, muzzle flash)
+- [x] Enemy health bars visible
+- [x] Victory/defeat/pause screens display correctly
+- [x] Game is playable end-to-end (start → waves → win/lose)
+- [x] No major bugs or crashes (basic stability)
 
 ### Sprint Review Focus
 
@@ -435,12 +447,11 @@ This plan follows an iterative sprint-based approach where each sprint delivers 
 
 ### Tasks
 
-1. **Wave System** ([js/level.js](js/level.js))
+1. **Campaign / Level System (builds on existing waves)** ([js/level.js](js/level.js))
 
-   - Wave-based enemy spawning
-   - Wave configuration (enemy count, types, timing)
-   - Wave progression (next wave after current completes)
-   - Wave counter display
+   - Expand from “one run = 5 waves” to **multiple levels**, each with its own wave set
+   - Level configuration (paths used, wave configs, modifiers)
+   - Clear “level complete” and “campaign complete” states
 
 2. **Level System** ([js/level.js](js/level.js))
 
@@ -502,7 +513,7 @@ This plan follows an iterative sprint-based approach where each sprint delivers 
 
 - **Difficulty Curve**: Is progression smooth?
 - **Variety**: Do different enemies feel different?
-- [ ] **Pacing**: Are waves well-timed?
+- **Pacing**: Are waves well-timed?
 - **Clarity**: Is progress clear to player?
 - **Replayability**: Do players want to replay levels?
 

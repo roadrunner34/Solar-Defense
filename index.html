@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solar Defense</title>
+    <link rel="stylesheet" href="styles/game.css">
+</head>
+<body>
+    <!-- Game canvas container - Three.js will render here -->
+    <div id="game-container"></div>
+    
+    <!-- HUD Overlay - displays game info on top of the 3D scene -->
+    <div id="hud">
+        <div id="hud-top">
+            <div id="wave-info">Wave: <span id="wave-number">1</span></div>
+            <div id="enemy-count">Enemies: <span id="enemies-remaining">0</span></div>
+        </div>
+        <div id="hud-bottom">
+            <div id="score-display">Score: <span id="score">0</span></div>
+            <div id="credits-display">Credits: <span id="credits">100</span></div>
+        </div>
+    </div>
+    
+    <!-- Game state screens (menu, victory, defeat) -->
+    <div id="game-screens">
+        <!-- Start Menu -->
+        <div id="start-screen" class="screen active">
+            <h1>Solar Defense</h1>
+            <p>Defend your planet from incoming enemies!</p>
+            <button id="start-button">Start Game</button>
+        </div>
+        
+        <!-- Victory Screen -->
+        <div id="victory-screen" class="screen">
+            <h1>Victory!</h1>
+            <p>You defended the planet!</p>
+            <p>Final Score: <span id="final-score-victory">0</span></p>
+            <button id="restart-victory">Play Again</button>
+        </div>
+        
+        <!-- Defeat Screen -->
+        <div id="defeat-screen" class="screen">
+            <h1>Defeat</h1>
+            <p>The enemy reached your planet...</p>
+            <p>Final Score: <span id="final-score-defeat">0</span></p>
+            <button id="restart-defeat">Try Again</button>
+        </div>
+        
+        <!-- Pause Screen -->
+        <div id="pause-screen" class="screen">
+            <h1>Paused</h1>
+            <button id="resume-button">Resume</button>
+            <button id="restart-pause">Restart</button>
+        </div>
+    </div>
+
+    <!-- 
+        Three.js from CDN - we load it as a module so we can use ES6 imports
+        The 'importmap' tells the browser where to find Three.js when we write 'import * from "three"'
+    -->
+    <!-- 
+        Import maps tell the browser where to find modules when we use 'import from "name"'
+        We're adding:
+        - three: The core Three.js library
+        - three/addons/: Built-in Three.js examples/addons (including post-processing)
+        - postprocessing: PMNDRS post-processing library for advanced effects like bloom
+        - gsap: Animation library for smooth transitions
+        - maath: Math utilities for frame-rate independent animations
+    -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+            "postprocessing": "https://cdn.jsdelivr.net/npm/postprocessing@6.36.4/build/index.js",
+            "gsap": "https://cdn.jsdelivr.net/npm/gsap@3.12.5/+esm",
+            "maath": "https://cdn.jsdelivr.net/npm/maath@0.10.8/+esm"
+        }
+    }
+    </script>
+    
+    <!-- Main game script - type="module" enables ES6 imports -->
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>

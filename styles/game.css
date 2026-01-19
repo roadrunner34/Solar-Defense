@@ -1,0 +1,275 @@
+/* 
+ * Solar Defense - Game Styles
+ * 
+ * This file controls all visual styling for the game UI.
+ * The 3D graphics are handled by Three.js, but overlays like
+ * the HUD, menus, and buttons are styled with CSS.
+ */
+
+/* Reset and base styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    overflow: hidden; /* Prevent scrollbars - we want full-screen game */
+    background: #000;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: #fff;
+}
+
+/* Game container fills the entire screen */
+#game-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1; /* Behind UI elements */
+}
+
+/* HUD (Heads-Up Display) - game info overlay */
+#hud {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none; /* Allows clicks to pass through to the game */
+    z-index: 10;
+    display: none; /* Hidden until game starts */
+}
+
+#hud.active {
+    display: block;
+}
+
+#hud-top {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    display: flex;
+    gap: 30px;
+}
+
+#hud-bottom {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    display: flex;
+    gap: 30px;
+}
+
+#hud-top > div,
+#hud-bottom > div {
+    background: rgba(0, 20, 40, 0.8);
+    padding: 10px 20px;
+    border-radius: 5px;
+    border: 1px solid rgba(0, 150, 255, 0.5);
+    font-size: 18px;
+    text-shadow: 0 0 10px rgba(0, 150, 255, 0.5);
+}
+
+#hud-top span,
+#hud-bottom span {
+    color: #00ffff;
+    font-weight: bold;
+}
+
+/* Game screens (menu, victory, defeat, pause) */
+#game-screens {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 100;
+    pointer-events: none;
+}
+
+.screen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: none; /* Hidden by default */
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.85);
+    pointer-events: auto;
+}
+
+.screen.active {
+    display: flex;
+}
+
+.screen h1 {
+    font-size: 64px;
+    margin-bottom: 20px;
+    text-shadow: 0 0 20px rgba(0, 150, 255, 0.8);
+    color: #00ffff;
+}
+
+.screen p {
+    font-size: 24px;
+    margin-bottom: 15px;
+    color: #aaa;
+}
+
+.screen button {
+    margin-top: 20px;
+    padding: 15px 40px;
+    font-size: 20px;
+    background: linear-gradient(180deg, #0066aa, #003366);
+    color: #fff;
+    border: 2px solid #00aaff;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.screen button:hover {
+    background: linear-gradient(180deg, #0088cc, #004488);
+    box-shadow: 0 0 20px rgba(0, 150, 255, 0.6);
+    transform: scale(1.05);
+}
+
+.screen button:active {
+    transform: scale(0.98);
+}
+
+/* Victory screen specific */
+#victory-screen h1 {
+    color: #00ff88;
+    text-shadow: 0 0 20px rgba(0, 255, 136, 0.8);
+}
+
+/* Defeat screen specific */
+#defeat-screen h1 {
+    color: #ff4444;
+    text-shadow: 0 0 20px rgba(255, 68, 68, 0.8);
+}
+
+/* Crosshair/targeting reticle (optional) */
+#crosshair {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 30px;
+    height: 30px;
+    border: 2px solid rgba(0, 255, 255, 0.6);
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 50;
+    display: none;
+}
+
+#crosshair.active {
+    display: block;
+}
+
+#crosshair::before,
+#crosshair::after {
+    content: '';
+    position: absolute;
+    background: rgba(0, 255, 255, 0.6);
+}
+
+#crosshair::before {
+    width: 10px;
+    height: 2px;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+#crosshair::after {
+    width: 2px;
+    height: 10px;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+/* Damage numbers (floating text when hitting enemies) */
+.damage-number {
+    position: fixed;
+    color: #ffff00;
+    font-size: 20px;
+    font-weight: bold;
+    text-shadow: 0 0 5px #ff8800;
+    pointer-events: none;
+    z-index: 200;
+    animation: floatUp 1s ease-out forwards;
+}
+
+@keyframes floatUp {
+    0% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    100% {
+        opacity: 0;
+        transform: translateY(-50px);
+    }
+}
+
+/* Health bar styles (for enemies) */
+.health-bar-container {
+    position: absolute;
+    width: 50px;
+    height: 6px;
+    background: rgba(0, 0, 0, 0.7);
+    border: 1px solid #333;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.health-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #ff0000, #ff4444);
+    transition: width 0.2s ease;
+}
+
+.health-bar.high {
+    background: linear-gradient(90deg, #00ff00, #44ff44);
+}
+
+.health-bar.medium {
+    background: linear-gradient(90deg, #ffff00, #ffff44);
+}
+
+/* Tutorial tooltips */
+.tooltip {
+    position: fixed;
+    background: rgba(0, 20, 40, 0.95);
+    padding: 15px 20px;
+    border-radius: 8px;
+    border: 1px solid #00aaff;
+    max-width: 300px;
+    z-index: 300;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.tooltip h3 {
+    color: #00ffff;
+    margin-bottom: 10px;
+}
+
+.tooltip p {
+    color: #ccc;
+    font-size: 14px;
+    line-height: 1.5;
+}
