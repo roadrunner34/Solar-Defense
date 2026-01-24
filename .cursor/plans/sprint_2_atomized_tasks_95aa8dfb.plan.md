@@ -4,28 +4,28 @@ overview: Break down Sprint 2 (Deployable Platform System) into the smallest pos
 todos:
   - id: task-1.1
     content: Create Platform Configuration in config.js - Add platforms section with Laser Battery and Missile Launcher stats
-    status: pending
+    status: completed
   - id: task-1.2
     content: Create Base Platform Class Structure - Platform class with constructor, mesh, and scene integration
-    status: pending
+    status: completed
   - id: task-1.3
     content: Create Platform Visuals (Laser Battery) - Distinct visual with turret and barrel
-    status: pending
+    status: completed
   - id: task-1.4
     content: Create Platform Visuals (Missile Launcher) - Distinct visual different from Laser Battery
-    status: pending
+    status: completed
   - id: task-2.1
     content: Define Placement Grid System - Validation functions for valid placement positions
-    status: pending
+    status: completed
   - id: task-2.2
     content: Implement Overlap Detection - Check minimum distance between platforms
-    status: pending
+    status: completed
   - id: task-2.3
     content: Create Placement Preview/Ghost System - Semi-transparent preview with range indicator
-    status: pending
+    status: completed
   - id: task-2.4
     content: Integrate Mouse Input for Placement - Raycasting and click-to-place functionality
-    status: pending
+    status: completed
   - id: task-3.1
     content: Implement Enemy Detection - Find closest enemy in range for each platform
     status: pending
@@ -111,11 +111,11 @@ Tasks are organized into **epics** (logical groupings) but broken down to the at
 
 **Acceptance Criteria**:
 
-- [ ] Add `platforms` section to CONFIG object
-- [ ] Define Laser Battery stats: damage (20), range (80), fireRate (1.2), cost (50)
-- [ ] Define Missile Launcher stats: damage (40), range (100), fireRate (0.8), cost (100)
-- [ ] Add helper function `getPlatformConfig(type)` similar to `getEnemyConfig()`
-- [ ] Document platform stats in comments
+- [x] Add `platforms` section to CONFIG object
+- [x] Define Laser Battery stats: damage (20), range (80), fireRate (1.2), cost (50)
+- [x] Define Missile Launcher stats: damage (40), range (100), fireRate (0.8), cost (100)
+- [x] Add helper function `getPlatformConfig(type)` similar to `getEnemyConfig()`
+- [x] Document platform stats in comments
 
 **Why this first?** Configuration drives all other work. Having it defined early allows parallel development.
 
@@ -131,13 +131,13 @@ Tasks are organized into **epics** (logical groupings) but broken down to the at
 
 **Acceptance Criteria**:
 
-- [ ] Create `Platform` class with constructor accepting: type, position, config
-- [ ] Store platform properties: type, position, stats (damage, range, fireRate, cost)
-- [ ] Create basic Three.js mesh (simple box/cylinder) for visual representation
-- [ ] Add platform to scene at specified position
-- [ ] Export `createPlatform(type, position)` function
-- [ ] Export `platforms` array to track all platforms
-- [ ] Platform renders correctly in scene (visible, positioned correctly)
+- [x] Create `Platform` class with constructor accepting: type, position, config
+- [x] Store platform properties: type, position, stats (damage, range, fireRate, cost)
+- [x] Create basic Three.js mesh (simple box/cylinder) for visual representation
+- [x] Add platform to scene at specified position
+- [x] Export `createPlatform(type, position)` function
+- [x] Export `platforms` array to track all platforms
+- [x] Platform renders correctly in scene (visible, positioned correctly)
 
 **Why this matters**: Foundation for all platform functionality. Can test by creating a platform and seeing it in the scene.
 
@@ -153,12 +153,12 @@ Tasks are organized into **epics** (logical groupings) but broken down to the at
 
 **Acceptance Criteria**:
 
-- [ ] Laser Battery has distinct visual (different from starbase)
-- [ ] Create turret that can rotate (similar to starbase structure)
-- [ ] Create barrel/cannon that extends from turret
-- [ ] Use different colors/materials to distinguish from starbase
-- [ ] Visual matches platform type (Laser Battery looks like a laser weapon)
-- [ ] Platform is clearly visible and recognizable
+- [x] Laser Battery has distinct visual (different from starbase)
+- [x] Create turret that can rotate (similar to starbase structure)
+- [x] Create barrel/cannon that extends from turret
+- [x] Use different colors/materials to distinguish from starbase
+- [x] Visual matches platform type (Laser Battery looks like a laser weapon)
+- [x] Platform is clearly visible and recognizable
 
 **Why separate?** Visuals can be iterated independently. This allows testing placement before targeting works.
 
@@ -174,11 +174,11 @@ Tasks are organized into **epics** (logical groupings) but broken down to the at
 
 **Acceptance Criteria**:
 
-- [ ] Missile Launcher has distinct visual from Laser Battery
-- [ ] Create launcher structure (different shape than laser)
-- [ ] Visual clearly indicates it's a missile weapon (e.g., tubes, different barrel)
-- [ ] Uses different colors/materials
-- [ ] Platform is clearly distinguishable from Laser Battery
+- [x] Missile Launcher has distinct visual from Laser Battery
+- [x] Create launcher structure (different shape than laser)
+- [x] Visual clearly indicates it's a missile weapon (e.g., tubes, different barrel)
+- [x] Uses different colors/materials
+- [x] Platform is clearly distinguishable from Laser Battery
 
 **Why separate?** Each platform type needs unique visuals. Can be done in parallel with Task 1.3.
 
@@ -196,12 +196,12 @@ Tasks are organized into **epics** (logical groupings) but broken down to the at
 
 **Acceptance Criteria**:
 
-- [ ] Define grid spacing constant (e.g., 10 units between platforms)
-- [ ] Create `isValidPlacementPosition(position)` function
-- [ ] Validate position is not too close to planet center (minimum distance)
-- [ ] Validate position is not too far from planet (maximum distance)
-- [ ] Return boolean: true if valid, false if invalid
-- [ ] Add helper function to snap position to grid (optional, for grid-based placement)
+- [x] Define grid spacing constant (e.g., 10 units between platforms)
+- [x] Create `isValidPlacementPosition(position)` function
+- [x] Validate position is not too close to planet center (minimum distance)
+- [x] Validate position is not too far from planet (maximum distance)
+- [x] Return boolean: true if valid, false if invalid
+- [x] Add helper function to snap position to grid (optional, for grid-based placement)
 
 **Why first?** Placement validation is needed before any placement UI or interaction.
 
@@ -217,12 +217,12 @@ Tasks are organized into **epics** (logical groupings) but broken down to the at
 
 **Acceptance Criteria**:
 
-- [ ] Create `checkPlatformOverlap(position, excludePlatform)` function
-- [ ] Check distance to all existing platforms
-- [ ] Enforce minimum distance between platforms (from config)
-- [ ] Return true if position would overlap, false otherwise
-- [ ] `excludePlatform` parameter allows checking placement of existing platform (for selling/moving)
-- [ ] Test with multiple platforms placed
+- [x] Create `checkPlatformOverlap(position, excludePlatform)` function
+- [x] Check distance to all existing platforms
+- [x] Enforce minimum distance between platforms (from config)
+- [x] Return true if position would overlap, false otherwise
+- [x] `excludePlatform` parameter allows checking placement of existing platform (for selling/moving)
+- [x] Test with multiple platforms placed
 
 **Why separate?** Overlap detection is a distinct algorithm that can be tested independently.
 
@@ -238,13 +238,13 @@ Tasks are organized into **epics** (logical groupings) but broken down to the at
 
 **Acceptance Criteria**:
 
-- [ ] Create `createPlacementPreview(type, position)` function
-- [ ] Preview shows semi-transparent version of platform
-- [ ] Preview updates position as mouse moves (will need input integration later)
-- [ ] Preview changes color based on validity (green = valid, red = invalid)
-- [ ] Preview shows range indicator (circle/sphere showing attack range)
-- [ ] `removePlacementPreview()` function to clean up
-- [ ] Preview renders correctly and updates smoothly
+- [x] Create `createPlacementPreview(type, position)` function
+- [x] Preview shows semi-transparent version of platform
+- [x] Preview updates position as mouse moves (will need input integration later)
+- [x] Preview changes color based on validity (green = valid, red = invalid)
+- [x] Preview shows range indicator (circle/sphere showing attack range)
+- [x] `removePlacementPreview()` function to clean up
+- [x] Preview renders correctly and updates smoothly
 
 **Why this matters**: Visual feedback is critical for good UX. Players need to see where they're placing.
 
@@ -260,13 +260,13 @@ Tasks are organized into **epics** (logical groupings) but broken down to the at
 
 **Acceptance Criteria**:
 
-- [ ] Add mouse click handler for placement mode
-- [ ] Convert mouse screen coordinates to 3D world position (raycasting)
-- [ ] Update placement preview position on mouse move
-- [ ] On click: validate position, create platform if valid
-- [ ] Handle placement mode toggle (enter/exit placement mode)
-- [ ] Test: Can click to place platform at valid locations
-- [ ] Test: Cannot place at invalid locations (overlaps, too close to planet)
+- [x] Add mouse click handler for placement mode
+- [x] Convert mouse screen coordinates to 3D world position (raycasting)
+- [x] Update placement preview position on mouse move
+- [x] On click: validate position, create platform if valid
+- [x] Handle placement mode toggle (enter/exit placement mode)
+- [x] Test: Can click to place platform at valid locations
+- [x] Test: Cannot place at invalid locations (overlaps, too close to planet)
 
 **Why separate?** Input handling is a distinct system. Can test placement logic before UI integration.
 

@@ -28,6 +28,24 @@ export const CONFIG = {
         range: 100                 // Maximum firing range
     },
 
+    // ==================== PLATFORMS ====================
+    platforms: {
+        // Laser Battery - Fast-firing, medium-range weapon platform
+        laserBattery: {
+            damage: 20,            // Damage per shot (lower than starbase but faster firing)
+            range: 80,              // Maximum firing range (units)
+            fireRate: 1.2,          // Shots per second (faster than starbase)
+            cost: 50                // Credits required to build
+        },
+        // Missile Launcher - High-damage, long-range weapon platform
+        missileLauncher: {
+            damage: 40,            // Damage per shot (higher than laser battery)
+            range: 100,             // Maximum firing range (units, same as starbase)
+            fireRate: 0.8,          // Shots per second (slower than laser battery)
+            cost: 100               // Credits required to build (more expensive)
+        }
+    },
+
     // ==================== ENEMIES ====================
     enemies: {
         basic: {
@@ -130,6 +148,15 @@ export const CONFIG = {
  */
 export function getEnemyConfig(type) {
     return CONFIG.enemies[type] || CONFIG.enemies.basic;
+}
+
+/**
+ * Helper function to get platform config by type
+ * @param {string} type - Platform type (laserBattery, missileLauncher)
+ * @returns {object} Platform configuration
+ */
+export function getPlatformConfig(type) {
+    return CONFIG.platforms[type] || CONFIG.platforms.laserBattery;
 }
 
 /**

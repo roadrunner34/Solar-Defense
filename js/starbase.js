@@ -8,9 +8,11 @@
  * (placement, upgrades) while weapons handle the aiming and shooting.
  * 
  * The starbase consists of:
- * - A base platform (the main body)
- * - A turret that rotates to aim
- * - A barrel that fires projectiles
+ * - A multi-layered base platform with glowing accents
+ * - A detailed turret that rotates to aim with status lights
+ * - An energy barrel with glowing coils
+ * - Multiple decorative elements (antennas, energy conduits, lights)
+ * - Animated visual effects (pulsing glows, rotating elements)
  */
 
 import * as THREE from 'three';
@@ -42,69 +44,287 @@ let timeSinceLastShot = 0;
 // Current target (for smooth tracking)
 let currentTarget = null;
 
+// Animation state for visual effects
+let animationTime = 0;
+
+// Store references to animated elements for the update loop
+let animatedElements = {
+    energyCoils: [],
+    barrelGlowMaterial: null
+};
+
 /**
- * Creates the starbase
+ * Creates the starbase with enhanced visuals
+ * 
+ * The starbase is built in layers:
+ * 1. Multi-tiered base platform with glowing edges
+ * 2. Detailed turret body with panel details and status lights
+ * 3. Energy barrel with glowing coils and muzzle details
+ * 4. Decorative elements (antennas, conduits, lights)
+ * 
  * @returns {THREE.Group} The starbase group containing all parts
  */
 export function createStarbase() {
     // Use a Group to combine multiple meshes
     starbase = new THREE.Group();
     
-    // === BASE PLATFORM ===
-    // A hexagonal platform that floats around the planet
-    const baseGeometry = new THREE.CylinderGeometry(3, 3.5, 1, 6);
-    const baseMaterial = new THREE.MeshPhongMaterial({
-        color: 0x4488aa,
-        emissive: 0x112233,
+    // Reset animated elements
+    animatedElements = {
+        energyCoils: [],
+        barrelGlowMaterial: null
+    };
+    
+    // ========================================
+    // === ENHANCED BASE PLATFORM (LAYERED) ===
+    // ========================================
+    // Build a multi-tiered base for a more substantial look
+    
+    // Bottom layer - wider foundation with subtle glow
+    const baseBottomGeometry = new THREE.CylinderGeometry(4, 4.5, 0.4, 8);
+    const baseBottomMaterial = new THREE.MeshPhongMaterial({
+        color: 0x4a4a4a,
+        emissive: new THREE.Color(0.03, 0.03, 0.03),
         flatShading: true
     });
-    const base = new THREE.Mesh(baseGeometry, baseMaterial);
-    starbase.add(base);
+    const baseBottom = new THREE.Mesh(baseBottomGeometry, baseBottomMaterial);
+    baseBottom.position.y = -0.3;
+    starbase.add(baseBottom);
     
-    // === TURRET BODY ===
-    // Sits on top of the base, rotates to track enemies automatically
-    const turretGeometry = new THREE.BoxGeometry(2, 1.5, 2);
-    const turretMaterial = new THREE.MeshPhongMaterial({
-        color: 0x336688,
-        emissive: 0x112244
+    // Bottom glow ring - removed for less glowing
+    
+    // Middle layer - main hexagonal platform
+    const baseMiddleGeometry = new THREE.CylinderGeometry(3.2, 3.8, 0.6, 6);
+    const baseMiddleMaterial = new THREE.MeshPhongMaterial({
+        color: 0x5a5a5a,
+        emissive: new THREE.Color(0.05, 0.05, 0.05),
+        flatShading: true,
+        shininess: 30
     });
-    const turret = new THREE.Mesh(turretGeometry, turretMaterial);
-    turret.position.y = 1; // On top of base
-    turret.name = 'turret'; // Named so we can find it later
+    const baseMiddle = new THREE.Mesh(baseMiddleGeometry, baseMiddleMaterial);
+    baseMiddle.position.y = 0.2;
+    starbase.add(baseMiddle);
+    
+    // Middle glow ring - removed for less glowing
+    
+    // Top layer - smaller platform for turret mount
+    const baseTopGeometry = new THREE.CylinderGeometry(2.5, 3, 0.5, 6);
+    const baseTopMaterial = new THREE.MeshPhongMaterial({
+        color: 0x6a6a6a,
+        emissive: new THREE.Color(0.06, 0.06, 0.06),
+        flatShading: true,
+        shininess: 40
+    });
+    const baseTop = new THREE.Mesh(baseTopGeometry, baseTopMaterial);
+    baseTop.position.y = 0.75;
+    starbase.add(baseTop);
+    
+    // === CORNER STRUCTURAL SUPPORTS ===
+    // Add vertical supports at hexagon corners for detail
+    for (let i = 0; i < 6; i++) {
+        const angle = (i / 6) * Math.PI * 2;
+        const radius = 3.3;
+        
+        // Vertical support pillar
+        const supportGeometry = new THREE.CylinderGeometry(0.15, 0.2, 1.2, 6);
+        const supportMaterial = new THREE.MeshPhongMaterial({
+            color: 0x6a6a6a,
+            emissive: new THREE.Color(0.03, 0.03, 0.03)
+        });
+        const support = new THREE.Mesh(supportGeometry, supportMaterial);
+        support.position.set(
+            Math.cos(angle) * radius,
+            0.3,
+            Math.sin(angle) * radius
+        );
+        starbase.add(support);
+        
+        // No lights on supports - removed for less glowing
+    }
+    
+    // === ROTATING ENERGY RING ===
+    // Removed for less glowing
+    
+    // ===================================
+    // === ENHANCED TURRET BODY ===
+    // ===================================
+    // Create a group for the turret so we can add details
+    const turret = new THREE.Group();
+    turret.position.y = 1.2;
+    turret.name = 'turret';
     starbase.add(turret);
     
-    // === BARREL ===
-    // The cannon that fires projectiles
-    const barrelGeometry = new THREE.CylinderGeometry(0.3, 0.4, 4, 8);
+    // Main turret body - octagonal for more interesting shape
+    const turretGeometry = new THREE.CylinderGeometry(1.3, 1.5, 1.2, 8);
+    const turretMaterial = new THREE.MeshPhongMaterial({
+        color: 0x5a5a5a,
+        emissive: new THREE.Color(0.05, 0.05, 0.05),
+        shininess: 50
+    });
+    const turretBody = new THREE.Mesh(turretGeometry, turretMaterial);
+    turret.add(turretBody);
+    
+    // Turret top cap - slightly smaller
+    const turretCapGeometry = new THREE.CylinderGeometry(1.1, 1.3, 0.3, 8);
+    const turretCapMaterial = new THREE.MeshPhongMaterial({
+        color: 0x6a6a6a,
+        emissive: new THREE.Color(0.06, 0.06, 0.06),
+        shininess: 60
+    });
+    const turretCap = new THREE.Mesh(turretCapGeometry, turretCapMaterial);
+    turretCap.position.y = 0.75;
+    turret.add(turretCap);
+    
+    // === TURRET PANEL DETAILS ===
+    // Add recessed panel details around the turret
+    for (let i = 0; i < 4; i++) {
+        const angle = (i / 4) * Math.PI * 2 + Math.PI / 4;
+        
+        // Panel recess (darker inset)
+        const panelGeometry = new THREE.BoxGeometry(0.6, 0.5, 0.1);
+        const panelMaterial = new THREE.MeshPhongMaterial({
+            color: 0x3a3a3a,
+            emissive: new THREE.Color(0.01, 0.01, 0.01)
+        });
+        const panel = new THREE.Mesh(panelGeometry, panelMaterial);
+        panel.position.set(
+            Math.cos(angle) * 1.35,
+            0,
+            Math.sin(angle) * 1.35
+        );
+        panel.rotation.y = -angle;
+        turret.add(panel);
+        
+        // No glowing indicators on panels - removed for less glowing
+    }
+    
+    // === TURRET SIDE LIGHTS ===
+    // Removed for less glowing
+    
+    // ===================================
+    // === ENHANCED BARREL WITH ENERGY COILS ===
+    // ===================================
+    // Create a group for the barrel assembly
+    const barrelGroup = new THREE.Group();
+    barrelGroup.position.z = 1.2;
+    barrelGroup.position.y = 0.3;
+    barrelGroup.name = 'barrel';
+    turret.add(barrelGroup);
+    
+    // Main barrel - longer and more detailed
+    const barrelGeometry = new THREE.CylinderGeometry(0.25, 0.35, 3.5, 12);
     const barrelMaterial = new THREE.MeshPhongMaterial({
-        color: 0x445566,
-        emissive: 0x222233
+        color: 0x4a4a4a,
+        emissive: new THREE.Color(0.03, 0.03, 0.03),
+        shininess: 70
     });
     const barrel = new THREE.Mesh(barrelGeometry, barrelMaterial);
-    barrel.rotation.x = Math.PI / 2; // Point forward (Z direction)
-    barrel.position.z = 2; // Extend from turret
-    barrel.position.y = 0.2;
-    barrel.name = 'barrel';
-    turret.add(barrel);
+    barrel.rotation.x = Math.PI / 2;
+    barrel.position.z = 1.5;
+    barrelGroup.add(barrel);
     
+    // Barrel base mount (where it connects to turret)
+    const barrelMountGeometry = new THREE.CylinderGeometry(0.5, 0.4, 0.6, 8);
+    const barrelMountMaterial = new THREE.MeshPhongMaterial({
+        color: 0x5a5a5a,
+        emissive: new THREE.Color(0.04, 0.04, 0.04)
+    });
+    const barrelMount = new THREE.Mesh(barrelMountGeometry, barrelMountMaterial);
+    barrelMount.rotation.x = Math.PI / 2;
+    barrelMount.position.z = 0;
+    barrelGroup.add(barrelMount);
+    
+    // === ENERGY COILS AROUND BARREL ===
+    // Reduced to just one subtle coil near the muzzle
+    const coilGeometry = new THREE.TorusGeometry(0.4, 0.04, 8, 16);
+    const coilMaterial = new THREE.MeshBasicMaterial({
+        color: new THREE.Color(0.6, 0.55, 0.5), // Very subtle warm gray
+        transparent: true,
+        opacity: 0.2
+    });
+    const coil = new THREE.Mesh(coilGeometry, coilMaterial);
+    coil.position.z = 2.4;
+    barrelGroup.add(coil);
+    animatedElements.energyCoils.push({ mesh: coil, material: coilMaterial, phase: 0 });
+    
+    // === MUZZLE DETAILS ===
+    // Subtle energy focus ring at barrel tip (only visible when charging)
+    const muzzleRingGeometry = new THREE.TorusGeometry(0.35, 0.06, 8, 16);
+    const muzzleRingMaterial = new THREE.MeshBasicMaterial({
+        color: new THREE.Color(0.8, 0.7, 0.6), // Subtle warm white
+        transparent: true,
+        opacity: 0.2 // Very subtle, only visible when charging
+    });
+    const muzzleRing = new THREE.Mesh(muzzleRingGeometry, muzzleRingMaterial);
+    muzzleRing.position.z = 3.3;
+    barrelGroup.add(muzzleRing);
+    animatedElements.barrelGlowMaterial = muzzleRingMaterial;
+    
+    // Removed inner muzzle glow for less glowing
+    
+    // ===================================
     // === DECORATIVE ELEMENTS ===
-    // Add some detail to make it look more interesting
+    // ===================================
     
-    // Antenna
-    const antennaGeometry = new THREE.CylinderGeometry(0.05, 0.05, 1.5, 8);
-    const antennaMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-    const antenna = new THREE.Mesh(antennaGeometry, antennaMaterial);
-    antenna.position.set(0.8, 1.5, -0.5);
-    turret.add(antenna);
+    // === MULTIPLE ANTENNAS ===
+    // Main communication antenna (taller)
+    const mainAntennaGeometry = new THREE.CylinderGeometry(0.04, 0.06, 2, 8);
+    const antennaMaterial = new THREE.MeshPhongMaterial({
+        color: 0x6a6a6a,
+        emissive: new THREE.Color(0.03, 0.03, 0.03)
+    });
+    const mainAntenna = new THREE.Mesh(mainAntennaGeometry, antennaMaterial);
+    mainAntenna.position.set(0.9, 1.5, -0.6);
+    turret.add(mainAntenna);
     
-    // Glowing tip
-    const tipGeometry = new THREE.SphereGeometry(0.1, 8, 8);
-    const tipMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-    const tip = new THREE.Mesh(tipGeometry, tipMaterial);
-    tip.position.y = 0.75;
-    antenna.add(tip);
+    // Main antenna tip - very subtle, non-glowing
+    const mainTipGeometry = new THREE.SphereGeometry(0.12, 8, 8);
+    const mainTipMaterial = new THREE.MeshPhongMaterial({
+        color: 0x8a6a5a, // Muted brown/orange, no glow
+        emissive: new THREE.Color(0.01, 0.01, 0.01)
+    });
+    const mainTip = new THREE.Mesh(mainTipGeometry, mainTipMaterial);
+    mainTip.position.y = 1.1;
+    mainAntenna.add(mainTip);
     
+    // Secondary antenna (shorter, different position)
+    const secondAntennaGeometry = new THREE.CylinderGeometry(0.03, 0.05, 1.2, 8);
+    const secondAntenna = new THREE.Mesh(secondAntennaGeometry, antennaMaterial);
+    secondAntenna.position.set(-0.7, 1.2, -0.5);
+    turret.add(secondAntenna);
+    
+    // Secondary antenna tip - very subtle, non-glowing
+    const secondTipGeometry = new THREE.SphereGeometry(0.08, 8, 8);
+    const secondTipMaterial = new THREE.MeshPhongMaterial({
+        color: 0x6a7a6a, // Muted gray-green, no glow
+        emissive: new THREE.Color(0.01, 0.01, 0.01)
+    });
+    const secondTip = new THREE.Mesh(secondTipGeometry, secondTipMaterial);
+    secondTip.position.y = 0.7;
+    secondAntenna.add(secondTip);
+    
+    // === ENERGY CONDUITS ===
+    // Non-glowing structural pipes
+    const conduitGeometry = new THREE.CylinderGeometry(0.06, 0.06, 1.5, 8);
+    const conduitMaterial = new THREE.MeshPhongMaterial({
+        color: 0x5a5a5a, // Neutral gray, no glow
+        emissive: new THREE.Color(0.01, 0.01, 0.01)
+    });
+    
+    // Left conduit
+    const leftConduit = new THREE.Mesh(conduitGeometry, conduitMaterial);
+    leftConduit.position.set(-1.0, 0.3, 0.8);
+    leftConduit.rotation.x = Math.PI / 4;
+    turret.add(leftConduit);
+    
+    // Right conduit
+    const rightConduit = new THREE.Mesh(conduitGeometry, conduitMaterial);
+    rightConduit.position.set(1.0, 0.3, 0.8);
+    rightConduit.rotation.x = Math.PI / 4;
+    turret.add(rightConduit);
+    
+    // ===================================
     // === POSITIONING ===
+    // ===================================
     // Place starbase at orbit around planet
     starbase.position.set(0, 8, 0); // Above the planet
     
@@ -117,13 +337,55 @@ export function createStarbase() {
 }
 
 /**
+ * Updates the starbase visual effects
+ * Called every frame to animate glowing elements, rotating parts, etc.
+ * 
+ * @param {number} deltaTime - Time since last frame in seconds
+ */
+function updateStarbaseVisuals(deltaTime) {
+    if (!starbase) return;
+    
+    // Update animation time
+    animationTime += deltaTime;
+    
+    // === PULSING ENERGY COILS ===
+    // Only one subtle coil now, pulses very gently
+    animatedElements.energyCoils.forEach(coil => {
+        const pulse = 0.15 + 0.05 * Math.sin(animationTime * 2 + coil.phase);
+        coil.material.opacity = pulse;
+    });
+    
+    // === BARREL MUZZLE GLOW ===
+    // Muzzle glows very subtly when close to firing
+    if (animatedElements.barrelGlowMaterial) {
+        const fireInterval = 1 / stats.fireRate;
+        const chargeProgress = Math.min(timeSinceLastShot / fireInterval, 1);
+        // Very subtle glow that only becomes slightly visible when charging
+        const baseGlow = 0.1;
+        const chargeGlow = 0.15 * chargeProgress;
+        animatedElements.barrelGlowMaterial.opacity = baseGlow + chargeGlow;
+        
+        // Keep color subtle
+        const r = 0.6 + 0.2 * chargeProgress;
+        const g = 0.55 + 0.15 * chargeProgress;
+        const b = 0.5 + 0.1 * chargeProgress;
+        animatedElements.barrelGlowMaterial.color.setRGB(r, g, b);
+    }
+}
+
+/**
  * Update starbase each frame
  * Automatically finds closest enemy, rotates to face it, and fires
+ * Also updates visual effects (pulsing glows, rotating elements)
+ * 
  * @param {number} deltaTime - Time since last frame in seconds
  * @returns {object|null} Projectile data if fired, null otherwise
  */
 export function updateStarbase(deltaTime) {
     if (!starbase) return null;
+    
+    // Update visual effects (pulsing, rotating, etc.)
+    updateStarbaseVisuals(deltaTime);
     
     // Get the turret (the part that rotates)
     const turret = starbase.getObjectByName('turret');
@@ -195,11 +457,12 @@ export function updateStarbase(deltaTime) {
  * @returns {object} Projectile data (position, direction, damage, speed)
  */
 function fireProjectile(turret, target) {
-    const barrel = turret.getObjectByName('barrel');
+    const barrelGroup = turret.getObjectByName('barrel');
     
     // Get world position of barrel tip
-    const barrelTip = new THREE.Vector3(0, 0, 2); // Local position of barrel end
-    barrel.localToWorld(barrelTip);
+    // The barrel group extends to z=3.35 (muzzle position)
+    const barrelTip = new THREE.Vector3(0, 0, 3.5); // Local position of barrel end
+    barrelGroup.localToWorld(barrelTip);
     
     // Calculate direction TO the target (not just where turret faces)
     // This ensures accuracy even with slight aim differences
@@ -331,6 +594,7 @@ export function resetStarbaseStats() {
         starbase.userData.stats = stats;
     }
     currentTarget = null;
+    animationTime = 0; // Reset animation time for visual effects
 }
 
 /**

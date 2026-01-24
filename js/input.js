@@ -13,6 +13,14 @@
 
 import * as THREE from 'three';
 import { camera } from './camera.js';
+import { 
+    placementState, 
+    updatePlacementPreview, 
+    confirmPlacement, 
+    cancelPlacement,
+    createPlacementPreview,
+    removePlacementPreview
+} from './platform.js';
 
 // Current input state - other modules read this
 export const inputState = {
@@ -39,7 +47,12 @@ export const inputState = {
     
     // Processed rotation values (what starbase should rotate to)
     targetRotationY: 0,  // Horizontal aim
-    targetRotationX: 0   // Vertical aim
+    targetRotationX: 0,  // Vertical aim
+    
+    // Click tracking for one-shot detection
+    // (We need to know when a click JUST happened, not just if button is held)
+    leftClickJustPressed: false,
+    rightClickJustPressed: false
 };
 
 // Raycaster for mouse picking (clicking on 3D objects)
@@ -82,6 +95,11 @@ function onMouseMove(event) {
     // Calculate rotation for starbase aiming
     // Map mouse X position to rotation (further right = rotate right)
     inputState.targetRotationY = -inputState.mouseNormalized.x * Math.PI;
+    
+    // If in placement mode, update the preview position
+    if (placementState.active) {
+        updatePlacementPreviewPosition();
+    }
 }
 
 /**
@@ -90,8 +108,20 @@ function onMouseMove(event) {
 function onMouseDown(event) {
     if (event.button === 0) {
         inputState.mouseDown = true;
+        inputState.leftClickJustPressed = true;
+        
+        // If in placement mode, try to place the platform
+        if (placementState.active) {
+            handlePlacementClick();
+        }
     } else if (event.button === 2) {
         inputState.rightMouseDown = true;
+        inputState.rightClickJustPressed = true;
+        
+        // Right-click cancels placement mode
+        if (placementState.active) {
+            cancelPlacement();
+        }
     }
 }
 
@@ -143,6 +173,10 @@ function onKeyDown(event) {
             break;
         case 'escape':
             inputState.keys.escape = true;
+            // ESC cancels placement mode
+            if (placementState.active) {
+                cancelPlacement();
+            }
             break;
     }
 }
@@ -254,4 +288,87 @@ export function cleanupInput() {
     window.removeEventListener('mouseup', onMouseUp);
     window.removeEventListener('keydown', onKeyDown);
     window.removeEventListener('keyup', onKeyUp);
+}
+
+// ==================== PLACEMENT INPUT HANDLING ====================
+
+/**
+ * Updates the placement preview position based on mouse position.
+ * 
+ * This uses raycasting to find where the mouse points on the game plane.
+ * The game plane is at Y=0 (the orbital plane where platforms are placed).
+ */
+function updatePlacementPreviewPosition() {
+    // Get the 3D position where mouse intersects the game plane
+    const worldPosition = getMouseWorldPosition(camera, 0);
+    
+    if (worldPosition) {
+        // Update the preview position
+        updatePlacementPreview(worldPosition);
+    }
+}
+
+/**
+ * Handles a click during placement mode.
+ * 
+ * This attempts to place the platform at the current preview position.
+ */
+function handlePlacementClick() {
+    // Try to confirm the placement
+    const platform = confirmPlacement();
+    
+    if (platform) {
+        console.log(`Platform placed successfully: ${platform.type}`);
+        // Platform was placed - preview is automatically removed
+    } else {
+        console.log('Placement failed - invalid position');
+        // Placement failed - preview stays so player can try again
+    }
+}
+
+/**
+ * Enters placement mode for a specific platform type.
+ * 
+ * This is called from the UI when the player selects a platform to build.
+ * 
+ * @param {string} platformType - The type of platform to place ('laserBattery' or 'missileLauncher')
+ */
+export function enterPlacementMode(platformType) {
+    // Create the placement preview
+    createPlacementPreview(platformType);
+    
+    // Update preview position immediately based on current mouse position
+    updatePlacementPreviewPosition();
+    
+    console.log(`Entered placement mode for: ${platformType}`);
+}
+
+/**
+ * Exits placement mode without placing a platform.
+ * 
+ * This is called when the player presses ESC or clicks cancel.
+ */
+export function exitPlacementMode() {
+    cancelPlacement();
+    console.log('Exited placement mode');
+}
+
+/**
+ * Clears the "just pressed" flags.
+ * 
+ * This should be called at the end of each frame to reset the one-shot
+ * click detection. Without this, a single click would be detected multiple times.
+ */
+export function clearInputFlags() {
+    inputState.leftClickJustPressed = false;
+    inputState.rightClickJustPressed = false;
+}
+
+/**
+ * Checks if the player is currently in placement mode.
+ * 
+ * @returns {boolean} True if in placement mode
+ */
+export function isInPlacementMode() {
+    return placementState.active;
 }

@@ -26,7 +26,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 // Import all our game systems
 import { createScene, scene, updateScene } from './scene.js';
 import { createCamera, camera, updateCamera, handleResize, shakeCamera } from './camera.js';
-import { initInput } from './input.js';
+import { initInput, enterPlacementMode, exitPlacementMode, isInPlacementMode, clearInputFlags } from './input.js';
 import { initPaths, getRandomPathName } from './path.js';
 import { initEnemies, spawnEnemy, updateEnemies, clearEnemies, 
          projectHealthBars, getEnemyCount, enemies } from './enemy.js';
@@ -108,7 +108,7 @@ function init() {
     initEnemies();
     initUI();
     initEconomy();
-    
+
     // Initialize particle effects system
     // This creates pooled particle systems for explosions, sparks, trails
     initParticles();
@@ -129,13 +129,35 @@ function init() {
     // Handle pause with Escape key
     window.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
+            // If in placement mode, just exit placement (don't pause)
+            if (isInPlacementMode()) {
+                exitPlacementMode();
+                return;
+            }
+            
             if (currentState === GameState.PLAYING) {
                 pauseGame();
             } else if (currentState === GameState.PAUSED) {
                 resumeGame();
             }
         }
+        
+        // ==================== TEMPORARY DEBUG KEYS ====================
+        // These allow testing placement without the full UI
+        // Press 1 for Laser Battery, 2 for Missile Launcher
+        // TODO: Remove these when UI is implemented (Task 5.x)
+        if (currentState === GameState.PLAYING) {
+            if (e.key === '1') {
+                enterPlacementMode('laserBattery');
+                console.log('DEBUG: Press 1 - Laser Battery placement mode');
+            } else if (e.key === '2') {
+                enterPlacementMode('missileLauncher');
+                console.log('DEBUG: Press 2 - Missile Launcher placement mode');
+            }
+        }
     });
+
+    
     
     // Create clock for delta time calculation
     clock = new THREE.Clock();
@@ -519,6 +541,10 @@ function animate() {
     // Render the scene through the post-processing composer
     // This applies bloom and other effects automatically
     composer.render();
+    
+    // Clear one-shot input flags at the end of each frame
+    // This ensures click events are only processed once
+    clearInputFlags();
 }
 
 /**

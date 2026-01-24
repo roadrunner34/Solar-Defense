@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Platform Config Tests - Task 1.1</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background: #1a1a1a;
+            color: #00ff00;
+            padding: 20px;
+            margin: 0;
+        }
+        h1 {
+            color: #00ffff;
+            border-bottom: 2px solid #00ffff;
+            padding-bottom: 10px;
+        }
+        #test-results {
+            background: #0a0a0a;
+            border: 1px solid #333;
+            padding: 20px;
+            margin-top: 20px;
+            border-radius: 5px;
+        }
+        .test-pass {
+            color: #00ff00;
+        }
+        .test-fail {
+            color: #ff0000;
+        }
+        button {
+            background: #00ffff;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+        button:hover {
+            background: #00cccc;
+        }
+        pre {
+            background: #000;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Platform Configuration Tests - Task 1.1</h1>
+    <p>Click the button below to run tests for the platform configuration system.</p>
+    <button onclick="runTests()">Run Tests</button>
+    <div id="test-results"></div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import { runPlatformConfigTests } from './tests/config/platform-config.test.js';
+
+        // Make it available globally
+        window.runTests = async function() {
+            const resultsDiv = document.getElementById('test-results');
+            resultsDiv.innerHTML = '<p>Running tests...</p>';
+            
+            // Capture console output
+            const originalLog = console.log;
+            const logs = [];
+            console.log = function(...args) {
+                logs.push(args.join(' '));
+                originalLog.apply(console, args);
+            };
+
+            try {
+                const passed = runPlatformConfigTests();
+                
+                // Restore console
+                console.log = originalLog;
+                
+                // Display results
+                const resultClass = passed ? 'test-pass' : 'test-fail';
+                const resultText = passed 
+                    ? '✓ All tests passed! Task 1.1 is complete.' 
+                    : '✗ Some tests failed. Check the console for details.';
+                
+                resultsDiv.innerHTML = `
+                    <h2 class="${resultClass}">${resultText}</h2>
+                    <pre>${logs.join('\n')}</pre>
+                `;
+            } catch (error) {
+                console.log = originalLog;
+                resultsDiv.innerHTML = `
+                    <h2 class="test-fail">Error running tests</h2>
+                    <pre>${error.message}\n${error.stack}</pre>
+                `;
+            }
+        };
+
+        // Auto-run tests on load
+        window.addEventListener('DOMContentLoaded', () => {
+            setTimeout(() => runTests(), 100);
+        });
+    </script>
+</body>
+</html>
