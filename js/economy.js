@@ -201,54 +201,87 @@ export function getGameStats() {
     };
 }
 
+// ==================== PERSISTENCE ====================
+//
+// These three functions existed from Sprint 1 and were never called by
+// anything. What was there saved the *live* credit and score balance and
+// restored it into module state on load - which, had it ever been wired up,
+// would have started every new run holding the previous run's money.
+//
+// What a session actually wants to remember is the best run: how far the player
+// got and what they scored. That is a record, not a resumable save, and it
+// cannot corrupt the run in progress.
+
+const SAVE_KEY = 'solarDefense_best';
+
 /**
- * Save progress to localStorage
- * Used for persisting between sessions
+ * Save a completed run if it beat the stored best.
+ *
+ * "Better" is judged on wave first and score second, because in a tower defence
+ * surviving longer is the achievement and score is the tiebreak. A lucky
+ * high-accuracy run that died on wave 2 should not displace a grind to wave 9.
+ *
+ * @param {{wave: number, score: number}} run - The run that just ended
+ * @returns {boolean} True if this became the new best
  */
-export function saveProgress() {
-    const saveData = {
-        credits,
-        score,
-        totalKills,
-        timestamp: Date.now()
-    };
-    
+export function saveProgress(run) {
+    const best = loadBestRun();
+
+    const isBetter = !best ||
+        run.wave > best.wave ||
+        (run.wave === best.wave && run.score > best.score);
+
+    if (!isBetter) return false;
+
     try {
-        localStorage.setItem('solarDefense_progress', JSON.stringify(saveData));
+        localStorage.setItem(SAVE_KEY, JSON.stringify({
+            wave: run.wave,
+            score: run.score,
+            kills: totalKills,
+            accuracy: getAccuracy(),
+            timestamp: Date.now()
+        }));
         return true;
-    } catch (e) {
-        console.warn('Could not save progress:', e);
+    } catch {
+        // Private browsing, or storage disabled. A missing high score is not
+        // worth interrupting anyone over.
         return false;
     }
 }
 
 /**
- * Load progress from localStorage
- * @returns {boolean} True if progress was loaded
+ * Read the stored best run.
+ *
+ * @returns {{wave: number, score: number}|null} Null if nothing is stored or
+ *          the stored value is unusable
  */
-export function loadProgress() {
+export function loadBestRun() {
     try {
-        const saveData = localStorage.getItem('solarDefense_progress');
-        if (saveData) {
-            const data = JSON.parse(saveData);
-            credits = data.credits || CONFIG.economy.startingCredits;
-            score = data.score || 0;
-            totalKills = data.totalKills || 0;
-            return true;
+        const raw = localStorage.getItem(SAVE_KEY);
+        if (!raw) return null;
+
+        const data = JSON.parse(raw);
+
+        // Validate rather than trust. localStorage is editable by anyone with
+        // devtools, and a NaN reaching the start screen would render as "Best:
+        // wave NaN" rather than failing anywhere useful.
+        if (typeof data.wave !== 'number' || typeof data.score !== 'number') {
+            return null;
         }
-    } catch (e) {
-        console.warn('Could not load progress:', e);
+
+        return data;
+    } catch {
+        return null;
     }
-    return false;
 }
 
 /**
- * Clear saved progress
+ * Forget the stored best run.
  */
 export function clearProgress() {
     try {
-        localStorage.removeItem('solarDefense_progress');
-    } catch (e) {
-        console.warn('Could not clear progress:', e);
+        localStorage.removeItem(SAVE_KEY);
+    } catch {
+        // Nothing useful to do if storage is unavailable
     }
 }

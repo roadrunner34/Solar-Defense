@@ -19,8 +19,9 @@ import {
     createPlatform, platforms, clearAllPlatforms, updatePlatforms,
     findClosestEnemyInRange, firePlatformProjectile, canAffordPlatform,
     sellPlatform, createPlacementPreview, updatePlacementPreview,
-    confirmPlacement, removePlacementPreview, placementState
+    confirmPlacement, removePlacementPreview, placementState, getSellValue
 } from '../js/platform.js';
+import { purchaseUpgrade } from '../js/upgrade.js';
 import { initEconomy, getCredits, spendCredits } from '../js/economy.js';
 import { CONFIG, getPlatformConfig } from '../js/config.js';
 
@@ -143,7 +144,43 @@ describe('updatePlatforms()', () => {
 
         expect(shot.damage).toBe(config.damage);
         expect(shot.speed).toBe(config.projectileSpeed);
-        expect(shot.source).toBe('platform:missileLauncher');
+        expect(shot.projectileType).toBe('missile');
+    });
+
+    // `source` identifies the individual platform, not its type. Two Laser
+    // Batteries have to keep separate kill counts for the selection panel, so
+    // the id is what a hit result is matched back against in main.js.
+    it('tags each shot with the firing platform\'s instance id', () => {
+        const first = createPlatform('laserBattery', new THREE.Vector3(20, 0, 0));
+        const second = createPlatform('laserBattery', new THREE.Vector3(-20, 0, 0));
+        enemyAt(0, 0, 0);
+
+        const sources = updatePlatforms(2).map(shot => shot.source);
+
+        expect(sources).toContain(`platform:${first.id}`);
+        expect(sources).toContain(`platform:${second.id}`);
+        expect(first.id).not.toBe(second.id);
+    });
+
+    it('counts the shots each platform has fired', () => {
+        const platform = createPlatform('laserBattery', new THREE.Vector3(0, 0, 0));
+        enemyAt(40, 0, 0);
+
+        expect(platform.shotsFired).toBe(0);
+
+        updatePlatforms(2);
+        updatePlatforms(2);
+
+        expect(platform.shotsFired).toBe(2);
+    });
+
+    it('aims a homing round at the enemy it acquired', () => {
+        createPlatform('missileLauncher', new THREE.Vector3(0, 0, 0));
+        const enemy = enemyAt(40, 0, 0);
+
+        const [shot] = updatePlatforms(2);
+
+        expect(shot.target).toBe(enemy);
     });
 
     it('stops firing at an enemy that leaves range', () => {
@@ -297,5 +334,56 @@ describe('sellPlatform()', () => {
         updatePlacementPreview(new THREE.Vector3(30, 0, 0));
 
         expect(confirmPlacement()).not.toBe(null);
+    });
+});
+
+describe('sell value and upgrades', () => {
+    it('refunds half of a fresh platform\'s build cost', () => {
+        const platform = createPlatform('laserBattery', new THREE.Vector3(30, 0, 0));
+        const cost = getPlatformConfig('laserBattery').cost;
+
+        expect(getSellValue(platform)).toBe(Math.floor(cost * 0.5));
+    });
+
+    // Without this, relocating a platform you have poured credits into costs
+    // you all of that investment - so the only rational play becomes never
+    // upgrading anything you might later want to move
+    it('includes what has been spent on upgrades', () => {
+        const platform = createPlatform('laserBattery', new THREE.Vector3(30, 0, 0));
+        const fresh = getSellValue(platform);
+
+        initEconomy(5000);
+        purchaseUpgrade(platform, 'damage', getPlatformConfig('laserBattery'), () => {});
+
+        expect(getSellValue(platform)).toBeGreaterThan(fresh);
+    });
+
+    it('pays the quoted amount when actually sold', () => {
+        const platform = createPlatform('laserBattery', new THREE.Vector3(30, 0, 0));
+
+        initEconomy(0);
+        const quoted = getSellValue(platform);
+        const paid = sellPlatform(platform);
+
+        expect(paid).toBe(quoted);
+        expect(getCredits()).toBe(quoted);
+    });
+
+    it('removes the platform from the board', () => {
+        const platform = createPlatform('laserBattery', new THREE.Vector3(30, 0, 0));
+
+        sellPlatform(platform);
+
+        expect(platforms).not.toContain(platform);
+        expect(platform.alive).toBe(false);
+    });
+
+    it('refunds nothing for a platform already sold', () => {
+        const platform = createPlatform('laserBattery', new THREE.Vector3(30, 0, 0));
+
+        sellPlatform(platform);
+
+        expect(sellPlatform(platform)).toBe(0);
+        expect(getSellValue(platform)).toBe(0);
     });
 });

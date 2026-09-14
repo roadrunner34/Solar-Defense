@@ -21,6 +21,8 @@
 
 import * as THREE from 'three';
 import { scene } from './scene.js';
+import { getUpgradeInvestment } from './upgrade.js';
+import { createHullMaterial } from './materials.js';
 import { getPlatformConfig, CONFIG } from './config.js';
 import { getClosestEnemy } from './enemy.js';
 import { spendCredits, addCredits, canAfford } from './economy.js';
@@ -292,7 +294,6 @@ export function createPlacementPreview(type) {
     placementState.active = true;
     placementState.selectedType = type;
     
-    console.log(`Placement preview created for ${type}`);
 }
 
 /**
@@ -335,7 +336,7 @@ function createPreviewMesh(type) {
  * @param {number} range - The platform's range
  * @returns {THREE.Line} The range indicator
  */
-function createRangeIndicator(range) {
+export function createRangeIndicator(range) {
     // Create a circle using points
     const segments = 64; // Number of line segments (more = smoother circle)
     const points = [];
@@ -484,7 +485,6 @@ export function removePlacementPreview() {
  */
 export function confirmPlacement() {
     if (!placementState.active || !placementState.selectedType) {
-        console.log('No active placement to confirm');
         return null;
     }
     
@@ -493,7 +493,6 @@ export function confirmPlacement() {
     
     if (!validationResult.valid) {
         placementState.lastError = validationResult.reason;
-        console.log(`Cannot place platform: ${validationResult.reason}`);
         return null;
     }
     
@@ -505,7 +504,6 @@ export function confirmPlacement() {
     
     if (!spendCredits(config.cost)) {
         placementState.lastError = `Need ${config.cost} credits`;
-        console.log(`Cannot place platform: insufficient credits (need ${config.cost})`);
         return null;
     }
     
@@ -517,7 +515,6 @@ export function confirmPlacement() {
         placementState.previewPosition.clone()
     );
     
-    console.log(`Platform placed at (${platform.position.x.toFixed(1)}, ${platform.position.z.toFixed(1)})`);
     
     // Remove the preview (placement complete)
     removePlacementPreview();
@@ -532,7 +529,6 @@ export function confirmPlacement() {
  */
 export function cancelPlacement() {
     if (placementState.active) {
-        console.log('Placement cancelled');
         removePlacementPreview();
     }
 }
@@ -560,9 +556,7 @@ export function createPlatform(type, position) {
         ? position.clone() 
         : new THREE.Vector3(position.x || 0, position.y || 0, position.z || 0);
     
-    // Create the 3D mesh for visual representation
-    // For Task 1.2, we use a simple box/cylinder as a placeholder
-    // Task 1.3 and 1.4 will create distinct visuals for each type
+    // Build the type's distinct visual - laser barrels or missile tubes
     const mesh = createPlatformMesh(type);
     
     // Set the platform's position
@@ -582,11 +576,18 @@ export function createPlatform(type, position) {
         cost: config.cost,
         projectileSpeed: config.projectileSpeed,
         rotationSpeed: config.rotationSpeed,
-        
-        // Combat state (will be used in Task 3.x)
+        projectileType: config.projectileType || 'laser',
+
+        // Combat state
         timeSinceLastShot: 0,    // Track firing cooldown
         currentTarget: null,     // Currently targeted enemy
-        
+
+        // Lifetime statistics, shown in the selection panel. Kills are credited
+        // by main.js matching a hit's `source` back to this platform's id.
+        shotsFired: 0,
+        kills: 0,
+        damageDealt: 0,
+
         // Platform ID for tracking - unique for the lifetime of the page
         id: nextPlatformId++,
         
@@ -637,7 +638,7 @@ function createLaserBatteryMesh() {
     
     // === BASE ===
     const baseGeometry = new THREE.CylinderGeometry(1.8, 2.2, 0.5, 8);
-    const baseMaterial = new THREE.MeshPhongMaterial({
+    const baseMaterial = createHullMaterial({
         color: 0x3a4a5a,          // Cool blue-grey
         emissive: 0x0a1520,
         flatShading: true,
@@ -664,7 +665,7 @@ function createLaserBatteryMesh() {
     platformGroup.add(turret);
     
     const housingGeometry = new THREE.CylinderGeometry(0.7, 0.9, 0.8, 8);
-    const housingMaterial = new THREE.MeshPhongMaterial({
+    const housingMaterial = createHullMaterial({
         color: 0x5a6a7a,
         emissive: 0x121a22,
         shininess: 60
@@ -677,7 +678,7 @@ function createLaserBatteryMesh() {
     turret.add(barrels);
     
     const barrelGeometry = new THREE.CylinderGeometry(0.12, 0.14, 2.2, 8);
-    const barrelMaterial = new THREE.MeshPhongMaterial({
+    const barrelMaterial = createHullMaterial({
         color: 0x8a9aaa,
         emissive: 0x1a2228,
         shininess: 80
@@ -718,7 +719,7 @@ function createMissileLauncherMesh() {
     
     // === BASE ===
     const baseGeometry = new THREE.CylinderGeometry(2.2, 2.7, 0.6, 6);
-    const baseMaterial = new THREE.MeshPhongMaterial({
+    const baseMaterial = createHullMaterial({
         color: 0x5a4a3a,          // Warm rust-grey
         emissive: 0x1a1008,
         flatShading: true
@@ -727,7 +728,7 @@ function createMissileLauncherMesh() {
     
     // Stabiliser legs, selling the weight of the thing
     const legGeometry = new THREE.BoxGeometry(0.3, 0.4, 1.0);
-    const legMaterial = new THREE.MeshPhongMaterial({
+    const legMaterial = createHullMaterial({
         color: 0x4a3a2a,
         emissive: 0x0a0804
     });
@@ -746,7 +747,7 @@ function createMissileLauncherMesh() {
     platformGroup.add(turret);
     
     const housingGeometry = new THREE.BoxGeometry(1.8, 1.0, 1.4);
-    const housingMaterial = new THREE.MeshPhongMaterial({
+    const housingMaterial = createHullMaterial({
         color: 0x6a5a4a,
         emissive: 0x181008,
         flatShading: true
@@ -759,7 +760,7 @@ function createMissileLauncherMesh() {
     turret.add(tubes);
     
     const tubeGeometry = new THREE.CylinderGeometry(0.26, 0.26, 1.6, 8);
-    const tubeMaterial = new THREE.MeshPhongMaterial({
+    const tubeMaterial = createHullMaterial({
         color: 0x7a6a5a,
         emissive: 0x1a1208,
         flatShading: true
@@ -858,12 +859,37 @@ export function canAffordPlatform(type) {
  */
 export function sellPlatform(platform) {
     if (!platform || !platform.alive) return 0;
-    
-    const refund = Math.floor(platform.cost * SELL_REFUND_RATE);
+
+    // The refund covers upgrades as well as the build cost, at the same rate.
+    //
+    // Without this, a heavily upgraded platform refunds exactly what a fresh
+    // one does - so relocating a platform you have invested 300 credits in
+    // costs you all of it, and the only rational play becomes never upgrading
+    // anything you might want to move. Repositioning should be a real option.
+    const refund = Math.floor(
+        (platform.cost + getUpgradeInvestment(platform)) * SELL_REFUND_RATE
+    );
+
     addCredits(refund, `sell_${platform.type}`);
     removePlatform(platform);
-    
+
     return refund;
+}
+
+/**
+ * What selling a platform would return, without selling it.
+ *
+ * Used by the selection panel so the button can name its own price.
+ *
+ * @param {object} platform
+ * @returns {number} Credits the sale would refund
+ */
+export function getSellValue(platform) {
+    if (!platform || !platform.alive) return 0;
+
+    return Math.floor(
+        (platform.cost + getUpgradeInvestment(platform)) * SELL_REFUND_RATE
+    );
 }
 
 // ==================== COMBAT ====================
@@ -908,7 +934,18 @@ export function firePlatformProjectile(platform, target) {
         direction,
         damage: platform.damage,
         speed: platform.projectileSpeed,
-        source: `platform:${platform.type}`
+
+        // Which kind of ordnance this platform fires. Read from config rather
+        // than branched on platform.type, so adding a third platform type is a
+        // config edit rather than a change here.
+        projectileType: platform.projectileType,
+
+        // Homing rounds need to know what they were aimed at. Lasers ignore it.
+        target,
+
+        // Carries the instance id, not just the type, so a hit can be
+        // attributed back to the individual platform that fired it
+        source: `platform:${platform.id}`
     };
 }
 
@@ -942,6 +979,7 @@ export function updatePlatforms(deltaTime) {
         
         if (isAimed && platform.timeSinceLastShot >= 1 / platform.fireRate) {
             platform.timeSinceLastShot = 0;
+            platform.shotsFired++;
             firedProjectiles.push(firePlatformProjectile(platform, target));
         }
     }

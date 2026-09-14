@@ -13,19 +13,29 @@ npm run test:watch   # re-run on change
 
 ```
 tests/
-├── config.test.js      # CONFIG contents and the get*Config() helpers
-├── economy.test.js     # credits, score, accuracy, wave bonuses
-├── mathUtils.test.js   # damping, easing, clamping
-├── path.test.js        # enemy path geometry and travel speed
-└── platform.test.js    # platform creation, placement rules, combat
+├── config.test.js           # CONFIG contents, helpers, endless wave ramp
+├── economy.test.js          # credits, score, accuracy, best-run persistence
+├── effects.test.js          # the step-driven effect scheduler
+├── enemy.test.js            # spawning, movement, damage, health bars
+├── mathUtils.test.js        # damping, easing, clamping
+├── particles.test.js        # pool recycling
+├── path.test.js             # enemy path geometry and travel speed
+├── platform.test.js         # creation, placement rules, overlap
+├── platform-combat.test.js  # targeting, firing, economy, selling
+├── projectile.test.js       # laser vs missile, homing, splash damage
+├── textures.test.js         # procedural noise and the headless fallback
+├── ui.test.js               # HUD and build menu
+└── upgrade.test.js          # tiers, costs, investment
 ```
 
 ## Environment
 
 Tests default to Vitest's `node` environment — most of the game's logic is
-pure and needs no DOM. Three.js scene construction works headless too, because
-`createFlareTexture()` returns a blank texture when no 2D canvas context is
-available.
+pure and needs no DOM. Three.js scene construction works headless too: every
+texture factory in `textures.js` returns a blank texture when there is no 2D
+canvas context, as does the lensflare texture in `scene.js`. `textures.test.js`
+guards that fallback specifically, since four other files rely on it to be able
+to build a scene at all.
 
 A file that genuinely needs a DOM (anything touching `document`, such as the
 enemy health bars) opts in with a docblock on its first line:

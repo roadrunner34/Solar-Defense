@@ -13,6 +13,8 @@
 
 import * as THREE from 'three';
 import { scene } from './scene.js';
+import { createEnemyMaterial } from './materials.js';
+import { createTrailParticle } from './particles.js';
 import { CONFIG, getEnemyConfig } from './config.js';
 import { getPositionOnPath, getDirectionOnPath, hasReachedPlanet, getPathLength } from './path.js';
 
@@ -26,6 +28,12 @@ const enemyMaterials = {};
 // How far above an enemy its health bar floats, in world units
 const HEALTH_BAR_HEIGHT_OFFSET = 2;
 
+// Seconds between thruster particles. See emitThrusterTrail().
+const THRUSTER_TRAIL_INTERVAL = 0.05;
+
+// Cached trail tints, keyed by enemy type
+const trailColors = {};
+
 /**
  * Initialize enemy system
  * Pre-creates geometries and materials for efficiency
@@ -36,27 +44,15 @@ export function initEnemies() {
     
     // Basic enemy - simple octahedron shape
     enemyGeometries.basic = new THREE.OctahedronGeometry(1, 0);
-    enemyMaterials.basic = new THREE.MeshPhongMaterial({
-        color: CONFIG.enemies.basic.color,
-        emissive: new THREE.Color(CONFIG.enemies.basic.color).multiplyScalar(0.3),
-        flatShading: true
-    });
-    
+    enemyMaterials.basic = createEnemyMaterial(CONFIG.enemies.basic.color);
+
     // Fast enemy - smaller, pointier (tetrahedron)
     enemyGeometries.fast = new THREE.TetrahedronGeometry(1, 0);
-    enemyMaterials.fast = new THREE.MeshPhongMaterial({
-        color: CONFIG.enemies.fast.color,
-        emissive: new THREE.Color(CONFIG.enemies.fast.color).multiplyScalar(0.3),
-        flatShading: true
-    });
-    
+    enemyMaterials.fast = createEnemyMaterial(CONFIG.enemies.fast.color);
+
     // Armored enemy - larger, chunky (dodecahedron)
     enemyGeometries.armored = new THREE.DodecahedronGeometry(1, 0);
-    enemyMaterials.armored = new THREE.MeshPhongMaterial({
-        color: CONFIG.enemies.armored.color,
-        emissive: new THREE.Color(CONFIG.enemies.armored.color).multiplyScalar(0.3),
-        flatShading: true
-    });
+    enemyMaterials.armored = createEnemyMaterial(CONFIG.enemies.armored.color);
 }
 
 /**
@@ -73,7 +69,15 @@ export function spawnEnemy(type = 'basic', pathName = 'default') {
     const material = enemyMaterials[type] || enemyMaterials.basic;
     
     const mesh = new THREE.Mesh(geometry, material.clone()); // Clone material for individual color changes
-    
+
+    // Engine glow, mounted on the trailing face.
+    //
+    // updateEnemies() calls lookAt() toward the direction of travel, and
+    // lookAt() points an object's +Z at its target - so local -Z is always the
+    // back of the craft whichever way it is heading. A visible drive is what
+    // turns three rotating platonic solids into three ships going somewhere.
+    mesh.add(createEngineGlow(config.color));
+
     // Scale based on enemy type
     const scale = config.size;
     mesh.scale.set(scale, scale, scale);
@@ -122,6 +126,43 @@ export function spawnEnemy(type = 'basic', pathName = 'default') {
 }
 
 /**
+ * Build the engine glow that rides on the back of an enemy.
+ *
+ * MeshBasicMaterial rather than an emissive Standard material: this is meant to
+ * be self-luminous and completely unaffected by where the sun is. The HDR
+ * colour - components above 1.0 - is what the bloom pass keys off, so the drive
+ * blooms into a soft halo instead of being a flat coloured dot.
+ *
+ * @param {number} color - The enemy type's identifying colour
+ * @returns {THREE.Mesh}
+ */
+function createEngineGlow(color) {
+    const tint = new THREE.Color(color);
+
+    const glow = new THREE.Mesh(
+        new THREE.SphereGeometry(0.42, 10, 8),
+        new THREE.MeshBasicMaterial({
+            // Pushed well past 1.0 and biased warm, so every drive plume reads
+            // as hot regardless of the hull colour it belongs to
+            color: new THREE.Color(
+                0.9 + tint.r * 2.2,
+                0.55 + tint.g * 1.6,
+                0.35 + tint.b * 1.6
+            ),
+            transparent: true,
+            opacity: 0.92,
+            fog: false
+        })
+    );
+
+    glow.name = 'engineGlow';
+    glow.position.z = -0.95;
+    glow.scale.set(0.7, 0.7, 1.7); // Stretched along the thrust axis
+
+    return glow;
+}
+
+/**
  * Creates a health bar for an enemy
  * Health bars are HTML elements positioned in screen space
  * @param {object} enemy - The enemy to create health bar for
@@ -150,6 +191,17 @@ function createHealthBar(enemy) {
 export function updateEnemies(deltaTime) {
     const result = {
         reachedPlanet: false,
+
+        // How many got through this frame. The boolean above cannot tell one
+        // leak from three, and with planet integrity replacing instant defeat
+        // the difference is the whole game: three enemies arriving together
+        // must cost three points of integrity, not one.
+        reachedPlanetCount: 0,
+
+        // Where each of them broke through, so the shield can flare in the
+        // right place rather than generically
+        breachPositions: [],
+
         destroyed: []
     };
     
@@ -182,18 +234,72 @@ export function updateEnemies(deltaTime) {
         
         // Add some wobble rotation for visual interest
         enemy.mesh.rotation.z += deltaTime * 2;
-        
+
+        // Lay down a thruster wake behind the drive
+        emitThrusterTrail(enemy, deltaTime);
+
         // Update health bar position
         updateHealthBarPosition(enemy);
         
         // Check if enemy reached the planet
         if (hasReachedPlanet(newPosition) || enemy.pathProgress >= 1) {
             result.reachedPlanet = true;
+            result.reachedPlanetCount++;
+            result.breachPositions.push(newPosition.clone());
             removeEnemy(enemy, i);
         }
     }
     
     return result;
+}
+
+/**
+ * Drop a thruster particle behind an enemy.
+ *
+ * Emission is rate-limited in time rather than once per frame for two reasons:
+ * the trail then looks identical at 60Hz and 144Hz, and the shared particle
+ * pool holds 300 slots. A full late wave can have twenty enemies on screen, and
+ * unthrottled per-frame emission would recycle the pool several times a second,
+ * cutting every trail short - including the projectile trails sharing it.
+ *
+ * @param {object} enemy
+ * @param {number} deltaTime
+ */
+function emitThrusterTrail(enemy, deltaTime) {
+    enemy.trailTimer = (enemy.trailTimer || 0) + deltaTime;
+
+    if (enemy.trailTimer < THRUSTER_TRAIL_INTERVAL) return;
+    enemy.trailTimer = 0;
+
+    const glow = enemy.mesh.getObjectByName('engineGlow');
+    if (!glow) return;
+
+    createTrailParticle(
+        glow.getWorldPosition(new THREE.Vector3()),
+        thrusterTrailColor(enemy.type),
+        0.45 * enemy.mesh.scale.x,
+        0.35
+    );
+}
+
+/**
+ * Trail tint for an enemy type, cached so the colour objects are not rebuilt
+ * several times a second.
+ *
+ * @param {string} type
+ * @returns {THREE.Color}
+ */
+function thrusterTrailColor(type) {
+    if (!trailColors[type]) {
+        const tint = new THREE.Color(getEnemyConfig(type).color);
+        trailColors[type] = new THREE.Color(
+            0.7 + tint.r * 1.1,
+            0.4 + tint.g * 0.9,
+            0.3 + tint.b * 0.9
+        );
+    }
+
+    return trailColors[type];
 }
 
 /**
@@ -337,13 +443,23 @@ function removeEnemy(enemy, index) {
     
     // Remove mesh from scene
     scene.remove(enemy.mesh);
-    
-    // Dispose of geometry and material (cleanup memory)
-    // Note: We cloned the material, so we should dispose it
+
+    // Dispose the per-instance material clone. The geometry is shared across
+    // every enemy of this type and must NOT be disposed here.
     if (enemy.mesh.material) {
         enemy.mesh.material.dispose();
     }
-    
+
+    // The engine glow is built fresh per enemy - its own geometry and its own
+    // material - so unlike the hull it owns both and has to release both.
+    // Missing this leaks two GPU objects per kill, which over a long endless
+    // run is hundreds.
+    const glow = enemy.mesh.getObjectByName('engineGlow');
+    if (glow) {
+        glow.geometry.dispose();
+        glow.material.dispose();
+    }
+
     // Remove from array
     enemies.splice(index, 1);
 }

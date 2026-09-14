@@ -17,6 +17,7 @@
 
 import * as THREE from 'three';
 import { scene } from './scene.js';
+import { createHullMaterial } from './materials.js';
 import { CONFIG } from './config.js';
 import { getClosestEnemy } from './enemy.js';
 
@@ -83,7 +84,7 @@ export function createStarbase() {
     
     // Bottom layer - wider foundation with subtle glow
     const baseBottomGeometry = new THREE.CylinderGeometry(4, 4.5, 0.4, 8);
-    const baseBottomMaterial = new THREE.MeshPhongMaterial({
+    const baseBottomMaterial = createHullMaterial({
         color: 0x4a4a4a,
         emissive: new THREE.Color(0.03, 0.03, 0.03),
         flatShading: true
@@ -96,7 +97,7 @@ export function createStarbase() {
     
     // Middle layer - main hexagonal platform
     const baseMiddleGeometry = new THREE.CylinderGeometry(3.2, 3.8, 0.6, 6);
-    const baseMiddleMaterial = new THREE.MeshPhongMaterial({
+    const baseMiddleMaterial = createHullMaterial({
         color: 0x5a5a5a,
         emissive: new THREE.Color(0.05, 0.05, 0.05),
         flatShading: true,
@@ -110,7 +111,7 @@ export function createStarbase() {
     
     // Top layer - smaller platform for turret mount
     const baseTopGeometry = new THREE.CylinderGeometry(2.5, 3, 0.5, 6);
-    const baseTopMaterial = new THREE.MeshPhongMaterial({
+    const baseTopMaterial = createHullMaterial({
         color: 0x6a6a6a,
         emissive: new THREE.Color(0.06, 0.06, 0.06),
         flatShading: true,
@@ -128,7 +129,7 @@ export function createStarbase() {
         
         // Vertical support pillar
         const supportGeometry = new THREE.CylinderGeometry(0.15, 0.2, 1.2, 6);
-        const supportMaterial = new THREE.MeshPhongMaterial({
+        const supportMaterial = createHullMaterial({
             color: 0x6a6a6a,
             emissive: new THREE.Color(0.03, 0.03, 0.03)
         });
@@ -157,7 +158,7 @@ export function createStarbase() {
     
     // Main turret body - octagonal for more interesting shape
     const turretGeometry = new THREE.CylinderGeometry(1.3, 1.5, 1.2, 8);
-    const turretMaterial = new THREE.MeshPhongMaterial({
+    const turretMaterial = createHullMaterial({
         color: 0x5a5a5a,
         emissive: new THREE.Color(0.05, 0.05, 0.05),
         shininess: 50
@@ -167,7 +168,7 @@ export function createStarbase() {
     
     // Turret top cap - slightly smaller
     const turretCapGeometry = new THREE.CylinderGeometry(1.1, 1.3, 0.3, 8);
-    const turretCapMaterial = new THREE.MeshPhongMaterial({
+    const turretCapMaterial = createHullMaterial({
         color: 0x6a6a6a,
         emissive: new THREE.Color(0.06, 0.06, 0.06),
         shininess: 60
@@ -183,7 +184,7 @@ export function createStarbase() {
         
         // Panel recess (darker inset)
         const panelGeometry = new THREE.BoxGeometry(0.6, 0.5, 0.1);
-        const panelMaterial = new THREE.MeshPhongMaterial({
+        const panelMaterial = createHullMaterial({
             color: 0x3a3a3a,
             emissive: new THREE.Color(0.01, 0.01, 0.01)
         });
@@ -214,7 +215,7 @@ export function createStarbase() {
     
     // Main barrel - longer and more detailed
     const barrelGeometry = new THREE.CylinderGeometry(0.25, 0.35, 3.5, 12);
-    const barrelMaterial = new THREE.MeshPhongMaterial({
+    const barrelMaterial = createHullMaterial({
         color: 0x4a4a4a,
         emissive: new THREE.Color(0.03, 0.03, 0.03),
         shininess: 70
@@ -226,7 +227,7 @@ export function createStarbase() {
     
     // Barrel base mount (where it connects to turret)
     const barrelMountGeometry = new THREE.CylinderGeometry(0.5, 0.4, 0.6, 8);
-    const barrelMountMaterial = new THREE.MeshPhongMaterial({
+    const barrelMountMaterial = createHullMaterial({
         color: 0x5a5a5a,
         emissive: new THREE.Color(0.04, 0.04, 0.04)
     });
@@ -270,7 +271,7 @@ export function createStarbase() {
     // === MULTIPLE ANTENNAS ===
     // Main communication antenna (taller)
     const mainAntennaGeometry = new THREE.CylinderGeometry(0.04, 0.06, 2, 8);
-    const antennaMaterial = new THREE.MeshPhongMaterial({
+    const antennaMaterial = createHullMaterial({
         color: 0x6a6a6a,
         emissive: new THREE.Color(0.03, 0.03, 0.03)
     });
@@ -280,7 +281,7 @@ export function createStarbase() {
     
     // Main antenna tip - very subtle, non-glowing
     const mainTipGeometry = new THREE.SphereGeometry(0.12, 8, 8);
-    const mainTipMaterial = new THREE.MeshPhongMaterial({
+    const mainTipMaterial = createHullMaterial({
         color: 0x8a6a5a, // Muted brown/orange, no glow
         emissive: new THREE.Color(0.01, 0.01, 0.01)
     });
@@ -296,7 +297,7 @@ export function createStarbase() {
     
     // Secondary antenna tip - very subtle, non-glowing
     const secondTipGeometry = new THREE.SphereGeometry(0.08, 8, 8);
-    const secondTipMaterial = new THREE.MeshPhongMaterial({
+    const secondTipMaterial = createHullMaterial({
         color: 0x6a7a6a, // Muted gray-green, no glow
         emissive: new THREE.Color(0.01, 0.01, 0.01)
     });
@@ -307,7 +308,7 @@ export function createStarbase() {
     // === ENERGY CONDUITS ===
     // Non-glowing structural pipes
     const conduitGeometry = new THREE.CylinderGeometry(0.06, 0.06, 1.5, 8);
-    const conduitMaterial = new THREE.MeshPhongMaterial({
+    const conduitMaterial = createHullMaterial({
         color: 0x5a5a5a, // Neutral gray, no glow
         emissive: new THREE.Color(0.01, 0.01, 0.01)
     });
@@ -463,6 +464,8 @@ function fireProjectile(turret, target) {
         direction: direction,
         damage: stats.damage,
         speed: stats.projectileSpeed,
+        projectileType: 'laser',
+        target,
         source: 'starbase'
     };
 }

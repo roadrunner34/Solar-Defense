@@ -78,3 +78,47 @@ describe('getWaveConfig()', () => {
         expect(wave6.bonusCredits).toBeGreaterThan(CONFIG.waves[5].bonusCredits);
     });
 });
+
+describe('endless waves', () => {
+    /** Total enemies across every group in a wave. */
+    const enemyCount = (wave) =>
+        getWaveConfig(wave).enemies.reduce((total, group) => total + group.count, 0);
+
+    it('never gets easier as the waves go on', () => {
+        // The old generator scaled on floor(wave / 5), which held flat for four
+        // waves and then doubled. This checks the ramp is monotonic.
+        for (let wave = 6; wave < 40; wave++) {
+            expect(enemyCount(wave)).toBeGreaterThanOrEqual(enemyCount(wave - 1));
+        }
+    });
+
+    it('steps up from wave 5 rather than jumping', () => {
+        const authored = enemyCount(5);
+        const first = enemyCount(6);
+
+        expect(first).toBeGreaterThan(authored);
+
+        // The old curve doubled here. Anything near that is a cliff, not a ramp.
+        expect(first).toBeLessThan(authored * 1.6);
+    });
+
+    it('raises the bonus alongside the difficulty', () => {
+        for (let wave = 7; wave < 30; wave++) {
+            expect(getWaveConfig(wave).bonusCredits)
+                .toBeGreaterThan(getWaveConfig(wave - 1).bonusCredits);
+        }
+    });
+
+    // Without a floor the spawn delay tends toward zero and a late wave arrives
+    // as one instantaneous block, which is not difficulty - it is a dropped frame
+    it('keeps a floor under the spawn spacing however deep the run goes', () => {
+        for (const group of getWaveConfig(500).enemies) {
+            expect(group.spawnDelay).toBeGreaterThanOrEqual(0.25);
+        }
+    });
+
+    it('keeps all three enemy types in every generated wave', () => {
+        const types = getWaveConfig(42).enemies.map(group => group.type);
+        expect(types).toEqual(['basic', 'fast', 'armored']);
+    });
+});

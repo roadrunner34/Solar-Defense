@@ -41,6 +41,7 @@ export const CONFIG = {
             range: 80,              // Maximum firing range (units)
             fireRate: 1.2,          // Shots per second (faster than starbase)
             cost: 50,               // Credits required to build
+            projectileType: 'laser',
             projectileSpeed: 60,    // Light, fast bolts - quicker than the starbase's 50
             rotationSpeed: 3.0      // Turns quickly, so it can track fast enemies
         },
@@ -50,8 +51,40 @@ export const CONFIG = {
             range: 100,             // Maximum firing range (units, same as starbase)
             fireRate: 0.8,          // Shots per second (slower than laser battery)
             cost: 100,              // Credits required to build (more expensive)
+            projectileType: 'missile',
             projectileSpeed: 35,    // Heavy ordnance - slower than the starbase's 50
             rotationSpeed: 1.5      // Turns slowly, so fast enemies can outrun its aim
+        }
+    },
+
+    // ==================== PROJECTILES ====================
+    // Two genuinely different weapons, not one bolt wearing two hats.
+    //
+    // The laser is a dumb bolt: it is fired along a fixed heading and whatever
+    // it meets first takes all of the damage. The missile steers toward its
+    // target and detonates, splitting its damage across everything nearby.
+    // That is what makes the Missile Launcher worth its extra 50 credits
+    // against a clustered wave, and what makes the Laser Battery the better
+    // answer to a single fast runner.
+    projectiles: {
+        laser: {
+            radius: 0.1,
+            length: 2,
+            homing: false,
+            trailInterval: 0.02,   // Seconds between trail particles
+            splashRadius: 0
+        },
+        missile: {
+            radius: 0.22,
+            length: 1.6,
+            homing: true,
+            turnRate: 2.6,         // Radians per second it can correct its heading
+            trailInterval: 0.014,  // Denser than a laser - this one leaves smoke
+            splashRadius: 7,       // World units
+            // Damage at the very edge of the blast, as a fraction of full.
+            // Above zero so a near miss still does something, well below 1 so
+            // that aiming into the middle of a group is rewarded.
+            splashMinimum: 0.3
         }
     },
 
@@ -123,6 +156,57 @@ export const CONFIG = {
         }
     },
 
+    // ==================== PLANET ====================
+    planet: {
+        // How many enemies can reach the planet before the run ends.
+        //
+        // This used to be effectively 1: a single leak ended the game instantly.
+        // That is the harshest failure state a tower defence can have, and it
+        // made experimenting with placement maximally expensive - the thing a
+        // game about placement most needs players to do. Three hits turns a
+        // mistake into information rather than a restart.
+        integrity: 3,
+
+        // The visible shield bubble, which cracks as integrity is spent
+        shieldRadius: 7.6
+    },
+
+    // ==================== UPGRADES ====================
+    // Three tiers per stat. Index 0 is the unupgraded value, so a tier-2
+    // Laser Battery does damage * multipliers.damage[2].
+    //
+    // The curves are deliberately uneven. Damage climbs fastest because it is
+    // the stat that keeps a platform relevant as enemy health scales; range
+    // climbs slowest because range compounds with placement, and a cheap range
+    // upgrade would let one well-placed platform cover the whole approach.
+    upgrades: {
+        maxTier: 3,
+
+        multipliers: {
+            damage:   [1, 1.4, 1.9, 2.5],
+            range:    [1, 1.12, 1.26, 1.42],
+            fireRate: [1, 1.25, 1.55, 1.9]
+        },
+
+        // Cost of reaching each tier, as a multiple of the structure's build
+        // cost. Superlinear, so a third tier on one platform costs about as
+        // much as a second tier on two - which is the choice the player is
+        // actually being asked to make.
+        costFactor: [0, 0.7, 1.3, 2.2],
+
+        // Readable labels for the panel
+        labels: {
+            damage: 'Damage',
+            range: 'Range',
+            fireRate: 'Fire rate'
+        },
+
+        // The starbase has no build cost to scale from, so it gets a notional
+        // one. Set above the Missile Launcher's 100 because upgrading the
+        // starbase benefits the whole map rather than one position.
+        starbaseBaseCost: 130
+    },
+
     // ==================== PATH ====================
     path: {
         // Path waypoints will be defined relative to scene
@@ -137,6 +221,59 @@ export const CONFIG = {
         projectileColor: 0x00ffff, // Cyan laser color
         explosionDuration: 0.5,    // How long explosions last
         damageNumberDuration: 1    // How long damage numbers float
+    },
+
+    // ==================== GRAPHICS ====================
+    // Quality tiers. Everything here is chosen once at startup by
+    // detectQualityTier() in postprocessing.js, which picks a tier from the
+    // device and then lets the frame-time watchdog step it down if the
+    // machine cannot keep up. 'samples' is the MSAA level on the composer's
+    // render target - it is fixed at startup because changing it means
+    // rebuilding the target, unlike the other knobs which are live.
+    graphics: {
+        defaultTier: 'high',
+        tiers: {
+            high: {
+                pixelRatio: 2,        // Cap on window.devicePixelRatio
+                samples: 4,           // MSAA samples on the composer target
+                bloomStrength: 0.85,
+                bloomRadius: 0.4,
+                bloomThreshold: 0.2,
+                asteroidCount: 240,   // Instanced, so this is cheap
+                starCount: 2600,
+                nebula: true
+            },
+            medium: {
+                pixelRatio: 1.5,
+                samples: 4,
+                bloomStrength: 0.7,
+                bloomRadius: 0.35,
+                bloomThreshold: 0.25,
+                asteroidCount: 140,
+                starCount: 1600,
+                nebula: true
+            },
+            low: {
+                pixelRatio: 1,
+                samples: 0,
+                bloomStrength: 0.5,
+                bloomRadius: 0.3,
+                bloomThreshold: 0.35,
+                asteroidCount: 60,
+                starCount: 800,
+                nebula: false
+            }
+        },
+        // Colour grading, applied after tone mapping in display-referred space
+        grade: {
+            vignetteIntensity: 0.42,
+            vignetteRadius: 0.7,
+            colorTint: [0.06, 0.10, 0.16],  // Cool blue lift in the shadows
+            contrast: 1.06,
+            saturation: 1.12
+        },
+        // Frames slower than this many ms trip the auto-downgrade watchdog
+        frameBudgetMs: 22
     },
 
     // ==================== SCORING ====================
@@ -168,23 +305,69 @@ export function getPlatformConfig(type) {
     return CONFIG.platforms[type] || CONFIG.platforms.laserBattery;
 }
 
+/** How many waves are hand-authored in CONFIG.waves. */
+const AUTHORED_WAVE_COUNT = Object.keys(CONFIG.waves).length;
+
 /**
- * Helper function to get wave config
+ * The tightest the spawn spacing is ever allowed to get, as a fraction of the
+ * authored delay. See the note in getWaveConfig().
+ */
+const MIN_SPAWN_DELAY_FACTOR = 0.3;
+
+/**
+ * Get the configuration for a wave.
+ *
+ * Waves 1 to 5 are hand-authored. Anything beyond is generated on a continuous
+ * difficulty ramp - see the extended note inside.
+ *
  * @param {number} waveNumber - Wave number
  * @returns {object} Wave configuration
  */
 export function getWaveConfig(waveNumber) {
-    // If wave doesn't exist, generate a harder version of wave 5
-    if (!CONFIG.waves[waveNumber]) {
-        const scale = Math.floor(waveNumber / 5) + 1;
-        return {
-            enemies: [
-                { type: 'basic', count: 5 * scale, spawnDelay: 1.5 / scale },
-                { type: 'fast', count: 3 * scale, spawnDelay: 1 / scale },
-                { type: 'armored', count: 2 * scale, spawnDelay: 3 / scale }
-            ],
-            bonusCredits: 150 * scale
-        };
-    }
-    return CONFIG.waves[waveNumber];
+    if (CONFIG.waves[waveNumber]) return CONFIG.waves[waveNumber];
+
+    // ---------- GENERATED WAVES ----------
+    //
+    // Past the authored campaign the game keeps going, scaling wave 5's
+    // composition. This branch existed from Sprint 1 and was unreachable,
+    // because main.js hard-stopped the game at wave 5 - so its curve was never
+    // played and never questioned.
+    //
+    // It used to scale on `Math.floor(waveNumber / 5) + 1`, which is a step
+    // function: wave 6 arrived at double the enemy count of wave 5, waves 6
+    // through 9 were then identical to each other, and wave 10 doubled again.
+    // A difficulty curve made of cliffs and plateaus is the worst of both -
+    // the cliffs feel unfair and the plateaus feel like nothing is happening.
+    //
+    // A continuous ramp instead. Every wave is a little harder than the last,
+    // which is what lets a player feel themselves reaching their limit rather
+    // than hitting a wall.
+    const past = waveNumber - AUTHORED_WAVE_COUNT;
+
+    // Enemy counts grow steadily. Rounding means a count occasionally holds for
+    // a wave rather than rising, which is fine - it never falls.
+    const countScale = 1 + past * 0.22;
+
+    // Spawn spacing tightens more slowly than counts grow, and stops tightening
+    // altogether at the floor. Without a floor the delay tends toward zero and
+    // a late wave arrives as a single instantaneous block, which is not
+    // difficulty - it is just an unwinnable frame.
+    const pacing = Math.max(MIN_SPAWN_DELAY_FACTOR, 1 - past * 0.055);
+
+    const scaled = (count, delay) => ({
+        count: Math.round(count * countScale),
+        spawnDelay: Math.max(0.25, delay * pacing)
+    });
+
+    return {
+        enemies: [
+            { type: 'basic', ...scaled(5, 1.5) },
+            { type: 'fast', ...scaled(3, 1) },
+            { type: 'armored', ...scaled(2, 3) }
+        ],
+
+        // Rewards climb with the difficulty, so a player pushing deep into
+        // endless can still afford to keep building
+        bonusCredits: Math.round(150 * (1 + past * 0.3))
+    };
 }

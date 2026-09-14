@@ -41,7 +41,11 @@ export function createCamera(renderer) {
         60,                                           // FOV in degrees
         window.innerWidth / window.innerHeight,       // Aspect ratio
         0.1,                                          // Near clipping plane
-        500                                           // Far clipping plane
+        800                                           // Far clipping plane - the
+                                                      // nebula shell is at 420
+                                                      // and the camera can pull
+                                                      // back to 100, so 500
+                                                      // would clip the sky
     );
     
     // Position camera above and behind the planet, looking down at an angle

@@ -9,7 +9,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
     initEconomy, getCredits, getScore, addCredits, spendCredits, canAfford,
     recordKill, recordShot, recordHit, getAccuracy, awardWaveBonus,
-    resetWaveTracking, getWaveSummary, getGameStats
+    resetWaveTracking, getWaveSummary, getGameStats,
+    saveProgress, loadBestRun, clearProgress
 } from '../js/economy.js';
 import { CONFIG } from '../js/config.js';
 
@@ -110,5 +111,97 @@ describe('wave tracking', () => {
         expect(summary.score).toBe(CONFIG.scoring.pointsPerKill.fast);
         // Kills are a per-game total, deliberately not reset per wave
         expect(summary.kills).toBe(2);
+    });
+});
+
+describe('best-run persistence', () => {
+    /**
+     * A minimal in-memory localStorage.
+     *
+     * economy.js reads the global directly, and Vitest's node environment has
+     * none. Stubbing it here also keeps the tests from depending on - or
+     * polluting - whatever the machine running them happens to have stored.
+     */
+    function stubStorage() {
+        const store = new Map();
+
+        globalThis.localStorage = {
+            getItem: key => (store.has(key) ? store.get(key) : null),
+            setItem: (key, value) => store.set(key, String(value)),
+            removeItem: key => store.delete(key)
+        };
+
+        return store;
+    }
+
+    beforeEach(() => {
+        stubStorage();
+        initEconomy();
+    });
+
+    it('has nothing stored to begin with', () => {
+        expect(loadBestRun()).toBeNull();
+    });
+
+    it('stores the first run that finishes', () => {
+        expect(saveProgress({ wave: 4, score: 1200 })).toBe(true);
+        expect(loadBestRun()).toMatchObject({ wave: 4, score: 1200 });
+    });
+
+    // Wave first, score second: in a tower defence, surviving longer is the
+    // achievement and score is the tiebreak
+    it('prefers a deeper run even at a lower score', () => {
+        saveProgress({ wave: 4, score: 9000 });
+        expect(saveProgress({ wave: 7, score: 100 })).toBe(true);
+        expect(loadBestRun().wave).toBe(7);
+    });
+
+    it('breaks a tie on the same wave with score', () => {
+        saveProgress({ wave: 5, score: 1000 });
+
+        expect(saveProgress({ wave: 5, score: 2000 })).toBe(true);
+        expect(loadBestRun().score).toBe(2000);
+
+        expect(saveProgress({ wave: 5, score: 1500 })).toBe(false);
+        expect(loadBestRun().score).toBe(2000);
+    });
+
+    it('does not overwrite a better run with a worse one', () => {
+        saveProgress({ wave: 9, score: 5000 });
+
+        expect(saveProgress({ wave: 2, score: 10 })).toBe(false);
+        expect(loadBestRun()).toMatchObject({ wave: 9, score: 5000 });
+    });
+
+    it('forgets the record when cleared', () => {
+        saveProgress({ wave: 6, score: 3000 });
+        clearProgress();
+
+        expect(loadBestRun()).toBeNull();
+    });
+
+    // localStorage is editable by anyone with devtools open, so a stored value
+    // is untrusted input. A NaN reaching the start screen would render as
+    // "Best: wave NaN" rather than failing anywhere useful.
+    it('ignores a corrupted record rather than trusting it', () => {
+        localStorage.setItem('solarDefense_best', 'not json at all');
+        expect(loadBestRun()).toBeNull();
+
+        localStorage.setItem('solarDefense_best', JSON.stringify({ wave: 'five' }));
+        expect(loadBestRun()).toBeNull();
+    });
+
+    it('survives storage being unavailable entirely', () => {
+        // Private browsing throws on both read and write
+        globalThis.localStorage = {
+            getItem() { throw new Error('denied'); },
+            setItem() { throw new Error('denied'); },
+            removeItem() { throw new Error('denied'); }
+        };
+
+        expect(() => loadBestRun()).not.toThrow();
+        expect(loadBestRun()).toBeNull();
+        expect(saveProgress({ wave: 3, score: 10 })).toBe(false);
+        expect(() => clearProgress()).not.toThrow();
     });
 });

@@ -66,7 +66,6 @@ export function initParticles() {
     );
     scene.add(trailParticleSystem.points);
     
-    console.log('Particle systems initialized');
 }
 
 /**
@@ -312,26 +311,37 @@ export function createSparks(position, direction = null, count = 10) {
 }
 
 /**
- * Create a trail particle at a position
- * 
- * Used for projectile trails - creates particles that fade behind moving objects
- * 
- * @param {THREE.Vector3} position - Where to create trail particle
+ * Create a trail particle at a position.
+ *
+ * Drops a stationary, shrinking mote that a moving object leaves behind. The
+ * particle deliberately has zero velocity: a trail is the record of where
+ * something has been, so it should hang in place while the emitter moves on.
+ * Give it velocity and you get a cloud that chases the projectile instead.
+ *
+ * This function existed unused for the whole of Sprint 2 - projectiles had no
+ * trails at all. It now takes appearance arguments so a laser bolt and a
+ * missile can be told apart by their wake: a tight bright cyan streak versus
+ * a wide, slow, grey smoke column.
+ *
+ * @param {THREE.Vector3} position - Where to create the trail particle
+ * @param {THREE.Color} [color] - Defaults to the trail system's own colour
+ * @param {number} [size] - Starting size
+ * @param {number} [life] - Seconds before it disappears
  */
-export function createTrailParticle(position) {
+export function createTrailParticle(position, color = null, size = 0.5, life = 0.3) {
     if (!trailParticleSystem) return;
-    
+
     const particle = getParticle(trailParticleSystem);
-    
+
     particle.active = true;
     particle.life = 0;
-    particle.color.copy(trailParticleSystem.defaultColor);
-    particle.maxLife = 0.3; // Short trail life
-    
+    particle.color.copy(color || trailParticleSystem.defaultColor);
+    particle.maxLife = life;
+
     particle.position.copy(position);
-    particle.velocity.set(0, 0, 0); // Trails don't move
-    
-    particle.startSize = 0.5;
+    particle.velocity.set(0, 0, 0); // Trails mark where the emitter was
+
+    particle.startSize = size;
     particle.endSize = 0;
     particle.size = particle.startSize;
 }
