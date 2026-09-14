@@ -420,6 +420,127 @@ describe('the Gravity Well', () => {
     });
 });
 
+// ==================== THE DISRUPTOR ====================
+
+/**
+ * The Disruptor exists to fix a dead end rather than to add a number.
+ *
+ * Armour subtracts from every incoming hit, so a Laser Battery's 20 damage
+ * lands as 10 on an Armored enemy. The cheap platform is simply the wrong tool
+ * and there is no counter-play, only the instruction to build something else.
+ */
+describe('the Disruptor', () => {
+    const disruptorAt = (x) =>
+        createPlatform('disruptor', new THREE.Vector3(x, 0, 0));
+
+    it('is an aura with no damage and no fire rate', () => {
+        const disruptor = disruptorAt(20);
+
+        expect(disruptor.behaviour).toBe('aura');
+        expect(disruptor.damage).toBeUndefined();
+        expect(disruptor.fireRate).toBeUndefined();
+    });
+
+    it('fires no projectiles', () => {
+        disruptorAt(20);
+        enemyAt(22, 'armored');
+
+        expect(updatePlatforms(1)).toEqual([]);
+    });
+
+    it('strips armour from enemies in range', () => {
+        disruptorAt(20);
+        const armored = enemyAt(25, 'armored');
+
+        updatePlatforms(CONFIG.status.auraTickSeconds + 0.01);
+
+        expect(hasStatus(armored, STATUS_ARMOR_SHRED)).toBe(true);
+        expect(getArmorReduction(armored)).toBeGreaterThan(0);
+    });
+
+    it('leaves enemies outside its radius alone', () => {
+        const disruptor = disruptorAt(20);
+        const armored = enemyAt(20 + disruptor.range + 10, 'armored');
+
+        updatePlatforms(CONFIG.status.auraTickSeconds + 0.01);
+
+        expect(hasStatus(armored, STATUS_ARMOR_SHRED)).toBe(false);
+    });
+
+    // The whole point: it has to strip MORE than the Armored enemy carries, or
+    // it is a partial discount that moves the dead end rather than removing it
+    it('strips more armour than an Armored enemy has', () => {
+        const disruptor = disruptorAt(20);
+        expect(disruptor.magnitude).toBeGreaterThan(CONFIG.enemies.armored.armor);
+    });
+
+    it('makes a Laser Battery land its full damage on an Armored enemy', () => {
+        const laserDamage = CONFIG.platforms.laserBattery.damage;
+
+        // Without a Disruptor
+        const unshielded = enemyAt(200, 'armored');
+        const beforeA = unshielded.health;
+        damageEnemy(unshielded, laserDamage);
+        const withArmour = beforeA - unshielded.health;
+
+        // With one
+        disruptorAt(20);
+        const shredded = enemyAt(25, 'armored');
+        updatePlatforms(CONFIG.status.auraTickSeconds + 0.01);
+
+        const beforeB = shredded.health;
+        damageEnemy(shredded, laserDamage);
+        const withoutArmour = beforeB - shredded.health;
+
+        expect(withArmour).toBe(laserDamage - CONFIG.enemies.armored.armor);
+        expect(withoutArmour).toBe(laserDamage);
+        expect(withoutArmour).toBeGreaterThan(withArmour);
+    });
+
+    // Meant to hold through the approach - an enemy shredded as it passes the
+    // Disruptor should still be soft when it reaches the guns further in
+    it('lasts well beyond the tick interval', () => {
+        const disruptor = disruptorAt(20);
+        expect(disruptor.duration).toBeGreaterThan(CONFIG.status.auraTickSeconds * 4);
+    });
+
+    it('pulses its emitter when it ticks', () => {
+        const disruptor = disruptorAt(20);
+        enemyAt(25, 'armored');
+
+        updatePlatforms(CONFIG.status.auraTickSeconds + 0.01);
+        const afterTick = disruptor.pulse;
+
+        updatePlatforms(0.05);
+
+        expect(afterTick).toBeGreaterThan(0);
+        expect(disruptor.pulse).toBeLessThan(afterTick);
+    });
+
+    it('keeps turning its emitter so it never looks switched off', () => {
+        const disruptor = disruptorAt(20);
+        const emitter = disruptor.mesh.getObjectByName('emitter');
+        const before = emitter.rotation.y;
+
+        updatePlatforms(0.1);
+
+        expect(emitter.rotation.y).not.toBe(before);
+    });
+
+    it('stacks with a Gravity Well rather than replacing it', () => {
+        disruptorAt(20);
+        createPlatform('gravityWell', new THREE.Vector3(34, 0, 0));
+
+        const armored = enemyAt(27, 'armored');
+
+        updatePlatforms(CONFIG.status.auraTickSeconds + 0.01);
+
+        // Different effect types coexist; only same-type applications refresh
+        expect(hasStatus(armored, STATUS_ARMOR_SHRED)).toBe(true);
+        expect(hasStatus(armored, STATUS_SLOW)).toBe(true);
+    });
+});
+
 // ==================== THE VISUAL TELL ====================
 
 /**

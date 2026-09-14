@@ -91,6 +91,39 @@ export const CONFIG = {
             // What this platform can have upgraded. Defaults to the weapon
             // stats when absent - see getUpgradeStats() in upgrade.js.
             upgradeStats: ['magnitude', 'range', 'duration']
+        },
+
+        // Disruptor - strips armour from everything in range
+        //
+        // This exists to fix a dead end in the balance rather than to add a
+        // number. Armour subtracts from every incoming hit, so a Laser
+        // Battery's 20 damage lands as 10 on an Armored enemy - the cheap
+        // platform is simply the wrong tool, and there is no counter-play, only
+        // the instruction to build something else.
+        //
+        // A Disruptor makes the platform the player already owns viable against
+        // the enemy it currently cannot hurt. That is a decision, not a stat.
+        disruptor: {
+            behaviour: 'aura',
+            statusType: 'armorShred',
+
+            // Flat armour points removed. Set above the Armored enemy's 10 so
+            // the effect is decisive rather than a partial discount - halfway
+            // measures here would just move the dead end rather than remove it.
+            magnitude: 12,
+
+            // Longer than the Gravity Well's, because this is meant to hold
+            // through the approach: an enemy shredded as it passes the
+            // Disruptor should still be soft when it reaches the guns further in
+            duration: 3,
+
+            // Shorter range than the Gravity Well. A slow wants to cover the
+            // approach; this wants to mark a killing ground.
+            range: 45,
+
+            cost: 90,
+            blurb: '-12 armour - 45 range',
+            upgradeStats: ['magnitude', 'range', 'duration']
         }
     },
 

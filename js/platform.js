@@ -647,7 +647,8 @@ export function createPlatform(type, position) {
 const PLATFORM_MESH_BUILDERS = {
     laserBattery: createLaserBatteryMesh,
     missileLauncher: createMissileLauncherMesh,
-    gravityWell: createGravityWellMesh
+    gravityWell: createGravityWellMesh,
+    disruptor: createDisruptorMesh
 };
 
 /**
@@ -933,6 +934,102 @@ function createGravityWellMesh() {
 }
 
 /**
+ * Builds the Disruptor mesh.
+ *
+ * Read as: an instrument, not a weapon. Like the Gravity Well it has no turret
+ * and no barrel, but it has to be distinguishable from the Well at a glance
+ * too - so where that one is a dense sphere held inside rings, this is open and
+ * skeletal: a thin mast carrying three prongs around a single emitter.
+ *
+ * Acid green, because cyan, orange and violet are already taken by the other
+ * three platforms and colour is how the player reads a board at speed.
+ *
+ * @returns {THREE.Group} The platform mesh group
+ */
+function createDisruptorMesh() {
+    const platformGroup = new THREE.Group();
+
+    // === BASE ===
+    const baseGeometry = new THREE.CylinderGeometry(1.7, 2.1, 0.45, 6);
+    const baseMaterial = createHullMaterial({
+        color: 0x35483a,          // Cold green-grey
+        emissive: 0x0a1410,
+        flatShading: true
+    });
+    platformGroup.add(new THREE.Mesh(baseGeometry, baseMaterial));
+
+    // === MAST ===
+    // Thin and tall. The open silhouette is the point: this should not read as
+    // having anything inside it.
+    const mastGeometry = new THREE.CylinderGeometry(0.16, 0.22, 3.2, 6);
+    const mastMaterial = createHullMaterial({
+        color: 0x5a6a5a,
+        emissive: 0x121a14,
+        shininess: 50
+    });
+
+    const mast = new THREE.Mesh(mastGeometry, mastMaterial);
+    mast.position.y = 1.8;
+    platformGroup.add(mast);
+
+    // === EMITTER ===
+    // Named so the update loop can pulse it on each tick
+    const emitterGroup = new THREE.Group();
+    emitterGroup.name = 'emitter';
+    emitterGroup.position.y = 3.5;
+    platformGroup.add(emitterGroup);
+
+    const emitterMaterial = new THREE.MeshBasicMaterial({
+        color: new THREE.Color(0.9, 2.2, 0.5), // HDR acid green, caught by bloom
+        transparent: true,
+        opacity: 0.9
+    });
+
+    const core = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(0.42, 0),
+        emitterMaterial
+    );
+    core.name = 'emitterCore';
+    emitterGroup.add(core);
+
+    // Three prongs angled up and outward around the emitter, so the thing looks
+    // like it is projecting a field rather than holding one in
+    const prongGeometry = new THREE.CylinderGeometry(0.05, 0.09, 1.3, 5);
+    const prongMaterial = createHullMaterial({
+        color: 0x6a7a68,
+        emissive: 0x141c16
+    });
+
+    for (let i = 0; i < 3; i++) {
+        const angle = (i / 3) * Math.PI * 2;
+        const prong = new THREE.Mesh(prongGeometry, prongMaterial);
+
+        prong.position.set(Math.cos(angle) * 0.55, -0.15, Math.sin(angle) * 0.55);
+        prong.rotation.z = Math.cos(angle) * 0.5;
+        prong.rotation.x = -Math.sin(angle) * 0.5;
+
+        emitterGroup.add(prong);
+    }
+
+    // A faint ring at the emitter, giving the pulse something to expand from
+    const ringMaterial = new THREE.MeshBasicMaterial({
+        color: new THREE.Color(0.7, 1.8, 0.4),
+        transparent: true,
+        opacity: 0.5
+    });
+
+    const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(0.75, 0.04, 6, 28),
+        ringMaterial
+    );
+    ring.name = 'emitterRing';
+    ring.rotation.x = Math.PI / 2;
+    emitterGroup.add(ring);
+
+    return platformGroup;
+}
+
+/**
  * Adds an empty marker at the point projectiles should spawn from.
  *
  * Using a marker object rather than per-type offset constants means the firing
@@ -1201,6 +1298,7 @@ function updateAuraPlatform(platform, deltaTime) {
     if (platform.timeSinceLastTick < CONFIG.status.auraTickSeconds) return;
 
     platform.timeSinceLastTick = 0;
+    platform.pulse = 1;
 
     const caught = getEnemiesInRange(platform.position, platform.range);
 
@@ -1231,13 +1329,57 @@ function updateAuraPlatform(platform, deltaTime) {
  */
 function animateAuraVisual(platform, deltaTime) {
     const rings = platform.mesh.getObjectByName('rings');
-    if (!rings) return;
 
-    const outer = rings.getObjectByName('ringOuter');
-    const inner = rings.getObjectByName('ringInner');
+    if (rings) {
+        const outer = rings.getObjectByName('ringOuter');
+        const inner = rings.getObjectByName('ringInner');
 
-    if (outer) outer.rotation.z += deltaTime * 0.9;
-    if (inner) inner.rotation.z -= deltaTime * 1.6;
+        if (outer) outer.rotation.z += deltaTime * 0.9;
+        if (inner) inner.rotation.z -= deltaTime * 1.6;
+    }
+
+    animateAuraPulse(platform, deltaTime);
+}
+
+/**
+ * Run down the flash a support platform shows when it applies its effect.
+ *
+ * An aura ticks four times a second; without this the only difference between
+ * a working Disruptor and a decorative one is a number in a panel the player
+ * probably does not have open. The pulse is the platform saying "that was me".
+ *
+ * Decays rather than toggles, so the tick reads as a pulse travelling outward
+ * instead of a light switching on and off.
+ *
+ * @param {object} platform
+ * @param {number} deltaTime
+ */
+function animateAuraPulse(platform, deltaTime) {
+    const emitter = platform.mesh.getObjectByName('emitter');
+    if (!emitter) return;
+
+    // Falls from 1 to 0 over about a third of a second - shorter than the tick
+    // interval, so each pulse finishes before the next begins
+    platform.pulse = Math.max(0, (platform.pulse || 0) - deltaTime * 3);
+
+    const core = emitter.getObjectByName('emitterCore');
+    const ring = emitter.getObjectByName('emitterRing');
+
+    if (core) {
+        const scale = 1 + platform.pulse * 0.45;
+        core.scale.set(scale, scale, scale);
+    }
+
+    if (ring) {
+        // The ring expands and fades as it goes, which is what sells it as
+        // something leaving the platform rather than something on it
+        const scale = 1 + platform.pulse * 1.1;
+        ring.scale.set(scale, scale, scale);
+        ring.material.opacity = 0.5 * (1 - platform.pulse * 0.7);
+    }
+
+    // Always turning, so the platform never looks switched off between pulses
+    emitter.rotation.y += deltaTime * 0.6;
 }
 
 /**
