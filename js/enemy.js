@@ -55,6 +55,12 @@ export function initEnemies() {
     // Armored enemy - larger, chunky (dodecahedron)
     enemyGeometries.armored = new THREE.DodecahedronGeometry(1, 0);
     enemyMaterials.armored = createEnemyMaterial(CONFIG.enemies.armored.color);
+
+    // Boss - an icosahedron, the one platonic solid the regulars do not use.
+    // Silhouette is how a player identifies an enemy before they can read its
+    // health bar, so a boss cannot share a shape with anything else.
+    enemyGeometries.boss = new THREE.IcosahedronGeometry(1, 0);
+    enemyMaterials.boss = createEnemyMaterial(CONFIG.enemies.boss.color);
 }
 
 /**
@@ -63,8 +69,12 @@ export function initEnemies() {
  * @param {string} pathName - Which path to follow
  * @returns {object} The created enemy object
  */
-export function spawnEnemy(type = 'basic', pathName = 'default') {
+export function spawnEnemy(type = 'basic', pathName = 'default', options = {}) {
     const config = getEnemyConfig(type);
+
+    // Bosses get tougher each time they appear, so their health is scaled at
+    // spawn rather than baked into the config
+    const health = Math.round(config.health * (options.healthScale || 1));
     
     // Create the 3D mesh
     const geometry = enemyGeometries[type] || enemyGeometries.basic;
@@ -80,6 +90,11 @@ export function spawnEnemy(type = 'basic', pathName = 'default') {
     // turns three rotating platonic solids into three ships going somewhere.
     mesh.add(createEngineGlow(config.color));
 
+    // A boss is built as ONE mesh with child decoration, not as a Group.
+    // damageEnemy(), flashEnemy() and removeEnemy() all reach straight for
+    // enemy.mesh.material, and a Group has none - it would break all three.
+    if (config.isBoss) addBossDecoration(mesh, config.color);
+
     // Scale based on enemy type
     const scale = config.size;
     mesh.scale.set(scale, scale, scale);
@@ -92,10 +107,17 @@ export function spawnEnemy(type = 'basic', pathName = 'default') {
     const enemy = {
         mesh,
         type,
-        health: config.health,
-        maxHealth: config.health,
+        health,
+        maxHealth: health,
         speed: config.speed,
         armor: config.armor,
+
+        // Boss identity. isBoss drives the HUD health bar, the heavier death
+        // and the music; statusResistance blunts slows and armour shred so a
+        // pair of support platforms cannot neutralise the fight.
+        isBoss: Boolean(config.isBoss),
+        displayName: config.displayName || type,
+        statusResistance: config.statusResistance || 0,
         pathName,
         pathProgress: 0, // 0 = start, 1 = end
         
@@ -121,8 +143,10 @@ export function spawnEnemy(type = 'basic', pathName = 'default') {
     // Store enemy reference on mesh for easy access during collision
     mesh.userData.enemy = enemy;
     
-    // Create health bar
-    enemy.healthBar = createHealthBar(enemy);
+    // Create health bar. A boss gets none: the 50px floating bar is far too
+    // small to read a 2400-health fight on, so it drives the HUD bar instead.
+    // Everything downstream already null-guards this.
+    enemy.healthBar = config.isBoss ? null : createHealthBar(enemy);
     
     // Add to scene and tracking array
     scene.add(mesh);
@@ -166,6 +190,64 @@ function createEngineGlow(color) {
     glow.scale.set(0.7, 0.7, 1.7); // Stretched along the thrust axis
 
     return glow;
+}
+
+/**
+ * Add the decoration that makes a boss read as a boss.
+ *
+ * Attached as children of the hull mesh rather than by building the whole thing
+ * as a THREE.Group. That is not a style choice: damageEnemy(), flashEnemy() and
+ * removeEnemy() all reach straight for enemy.mesh.material, and a Group has no
+ * material at all - building the boss as one would break the hit flash, the
+ * damage path and the disposal in one go.
+ *
+ * Every child owns its own geometry and material, so removeEnemy() has to
+ * release them; the shared hull geometry must NOT be disposed.
+ *
+ * @param {THREE.Mesh} mesh - The boss hull
+ * @param {number} color - The boss's identifying colour
+ */
+function addBossDecoration(mesh, color) {
+    const tint = new THREE.Color(color);
+
+    // A hot core, visible through the gaps in the shell as it turns. The HDR
+    // colour is what the bloom pass keys off.
+    const core = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(0.72, 1),
+        new THREE.MeshBasicMaterial({
+            color: new THREE.Color(
+                1.2 + tint.r * 1.6,
+                0.3 + tint.g * 1.2,
+                0.5 + tint.b * 1.4
+            )
+        })
+    );
+    core.name = 'bossCore';
+    mesh.add(core);
+
+    // Two armour rings on different axes. They read as plating rather than as
+    // the energy rings the Gravity Well uses, because they are lit hull
+    // material rather than self-luminous.
+    const ringMaterial = new THREE.MeshBasicMaterial({
+        color: new THREE.Color(0.9, 0.12, 0.35),
+        transparent: true,
+        opacity: 0.85
+    });
+
+    for (const [index, rotation] of [[0, 0], [1, Math.PI / 3]]) {
+        const ring = new THREE.Mesh(
+            new THREE.TorusGeometry(1.22 + index * 0.16, 0.07, 6, 28),
+            ringMaterial
+        );
+
+        ring.name = `bossRing${index}`;
+        ring.rotation.x = Math.PI / 2 + rotation;
+        ring.rotation.y = rotation;
+
+        mesh.add(ring);
+    }
+
+    return mesh;
 }
 
 /**
@@ -515,14 +597,19 @@ function removeEnemy(enemy, index) {
         enemy.mesh.material.dispose();
     }
 
-    // The engine glow is built fresh per enemy - its own geometry and its own
-    // material - so unlike the hull it owns both and has to release both.
-    // Missing this leaks two GPU objects per kill, which over a long endless
-    // run is hundreds.
-    const glow = enemy.mesh.getObjectByName('engineGlow');
-    if (glow) {
-        glow.geometry.dispose();
-        glow.material.dispose();
+    // Every child of the hull - the engine glow on all enemies, plus the core
+    // and armour rings on a boss - is built fresh per enemy and owns both its
+    // geometry and its material, so unlike the shared hull geometry it has to
+    // release both. Missing this leaks GPU objects per kill, which over a long
+    // endless run is hundreds.
+    //
+    // Walked generically rather than by name so that decoration added to a
+    // future enemy type cannot be forgotten here.
+    for (const child of enemy.mesh.children) {
+        if (!child.isMesh) continue;
+
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) child.material.dispose();
     }
 
     // Remove from array

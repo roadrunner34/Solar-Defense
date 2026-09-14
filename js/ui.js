@@ -72,6 +72,11 @@ export function initUI() {
     elements.enemiesPlural = document.getElementById('enemies-plural');
     elements.integrityPips = document.getElementById('integrity-pips');
 
+    // Boss health bar
+    elements.bossBar = document.getElementById('boss-bar');
+    elements.bossName = document.getElementById('boss-name');
+    elements.bossFill = document.getElementById('boss-fill');
+
     // Selection panel
     elements.selectionPanel = document.getElementById('selection-panel');
     elements.selectionName = document.getElementById('selection-name');
@@ -130,6 +135,67 @@ function wireButtonClickSound() {
 
         if (button && !button.disabled) playSound('uiClick');
     });
+}
+
+// ==================== BOSS HEALTH BAR ====================
+
+/**
+ * Show the boss bar.
+ *
+ * Bosses do not use the small floating health bar every other enemy carries:
+ * 50 pixels cannot represent a 2400-health fight, and the one number the player
+ * most needs during it is how much is left.
+ *
+ * @param {string} name - The boss's display name
+ */
+export function showBossBar(name) {
+    if (!elements.bossBar) return;
+
+    if (elements.bossName) elements.bossName.textContent = name;
+
+    updateBossBar(1);
+    elements.bossBar.hidden = false;
+
+    if (prefersReducedMotion()) return;
+
+    // A short entrance, because a boss arriving should be an event rather than
+    // a bar that was quietly always there
+    gsap.fromTo(elements.bossBar,
+        { opacity: 0, y: -14 },
+        { opacity: 1, y: 0, duration: 0.45, ease: 'power2.out' }
+    );
+}
+
+/**
+ * Set how full the boss bar is.
+ *
+ * @param {number} fraction - 0 to 1
+ */
+export function updateBossBar(fraction) {
+    if (!elements.bossFill) return;
+
+    const clamped = Math.min(1, Math.max(0, fraction));
+
+    elements.bossFill.style.width = `${clamped * 100}%`;
+
+    // The bar changes colour as the fight turns, so its state is readable from
+    // peripheral vision without reading a number
+    elements.bossFill.classList.toggle('critical', clamped <= 0.25);
+    elements.bossFill.classList.toggle('wounded', clamped > 0.25 && clamped <= 0.6);
+}
+
+/**
+ * Hide the boss bar.
+ */
+export function hideBossBar() {
+    if (elements.bossBar) elements.bossBar.hidden = true;
+}
+
+/**
+ * @returns {boolean} Whether the boss bar is showing
+ */
+export function isBossBarVisible() {
+    return Boolean(elements.bossBar && !elements.bossBar.hidden);
 }
 
 // ==================== SETTINGS SCREEN ====================

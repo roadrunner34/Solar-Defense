@@ -407,6 +407,61 @@ body {
     color: var(--good);
 }
 
+/* ==================== BOSS HEALTH BAR ==================== */
+
+/* Centred at the top, wide, and the only red thing in the HUD. A boss fight is
+   the one moment the game wants the player looking at a single number, so this
+   deliberately breaks the corner-panel layout every other readout follows. */
+
+#boss-bar {
+    position: absolute;
+    top: var(--hud-inset);
+    left: 50%;
+    width: min(520px, 60vw);
+    transform: translateX(-50%);
+    text-align: center;
+    pointer-events: none;
+}
+
+#boss-name {
+    margin-bottom: var(--gap-2);
+    color: var(--bad);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    text-shadow: 0 0 14px rgba(255, 93, 93, 0.55);
+}
+
+.boss-meter {
+    height: 9px;
+    overflow: hidden;
+    background: rgba(2, 5, 12, 0.8);
+    border: 1px solid rgba(255, 93, 93, 0.45);
+    border-radius: 5px;
+}
+
+/* Width is driven from JS. The transition is what makes a big hit read as a
+   chunk being taken out rather than the bar teleporting. */
+.boss-fill {
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(90deg, #ff5d5d, #ff2266);
+    border-radius: 4px;
+    box-shadow: 0 0 14px rgba(255, 34, 102, 0.6);
+    transition: width 0.25s ease-out, background 0.4s ease;
+}
+
+/* Colour shifts as the fight turns, so its state is readable from peripheral
+   vision without reading the bar's length precisely */
+.boss-fill.wounded {
+    background: linear-gradient(90deg, #ffb547, #ff5d5d);
+}
+
+.boss-fill.critical {
+    background: linear-gradient(90deg, #ffd257, #ffb547);
+}
+
 /* ==================== TARGETING PRIORITY ==================== */
 
 /* A segmented row rather than a dropdown, because the whole value of this

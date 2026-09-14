@@ -15,7 +15,8 @@ export const CONFIG = {
         creditsPerKill: {
             basic: 10,             // Credits for killing basic enemy
             fast: 15,              // Fast enemies are worth more
-            armored: 25            // Armored enemies worth the most
+            armored: 25,           // Armored enemies worth the most
+            boss: 250              // A boss is a wave's worth of income on its own
         }
     },
 
@@ -198,7 +199,56 @@ export const CONFIG = {
             armor: 10,             // Reduces incoming damage by 10
             size: 1.5,
             color: 0x8844ff        // Purple
+        },
+
+        // ---------- BOSS ----------
+        // Endless mode had no shape: wave 23 played exactly like wave 22, only
+        // with more of everything. A boss is punctuation - something that ends
+        // a stretch of the run and is remembered separately from it.
+        boss: {
+            health: 2000,
+            speed: 2.2,            // Slow, so the fight lasts and can be lost
+
+            // Armour was 20 in the first playtest, and that was a mistake worth
+            // recording. damageEnemy() floors a hit at 1, so a Laser Battery's
+            // 20 damage landed as exactly 1 - seven of them took a full minute
+            // to remove a third of the boss, and the player's only feedback was
+            // that their guns had stopped working, with no legible reason.
+            //
+            // 14 keeps the lesson and drops the cliff. A laser lands 6 instead
+            // of 1: visibly blunted, not silently useless. A Disruptor still
+            // triples it, which is the counter-play this fight exists to teach.
+            armor: 14,
+
+            size: 3.4,
+            color: 0xff2266,       // Crimson - unlike any of the three regulars
+
+            // Marks it as a boss: gets the HUD health bar rather than the
+            // floating one, a heavier death, and its own credit value.
+            isBoss: true,
+            displayName: 'Dreadnought',
+
+            // Shrugs off most of what support platforms do to it.
+            //
+            // Without this a pair of Gravity Wells trivialises the whole fight -
+            // the boss is slow already, and slowing it further just means it
+            // spends longer being shot at with no way to threaten anything. A
+            // boss that support platforms cannot neutralise is a boss the
+            // player has to actually kill.
+            statusResistance: 0.65
         }
+    },
+
+    // ==================== BOSSES ====================
+    bosses: {
+        // A boss caps the authored campaign and then returns on this cadence
+        // through endless mode.
+        everyWaves: 5,
+
+        // Health added per appearance, as a fraction of the base. The nth boss
+        // is meaningfully harder than the last, or the punctuation stops
+        // meaning anything by wave 30.
+        healthScalePerAppearance: 0.55
     },
 
     // ==================== WAVES ====================
@@ -597,6 +647,33 @@ export const CONFIG = {
                 ]
             },
 
+            // A boss has arrived. Low, slow and dissonant - a minor second
+            // between the two sustained tones, which is the interval the ear
+            // reads as threat rather than as music.
+            bossArrival: {
+                cooldown: 2,
+                priority: true,
+                layers: [
+                    {
+                        source: 'tone', wave: 'sawtooth',
+                        freq: [55, 41], duration: 2.2,
+                        gain: 0.3, attack: 0.08,
+                        filter: { type: 'lowpass', freq: [700, 160], q: 2 }
+                    },
+                    {
+                        source: 'tone', wave: 'sawtooth',
+                        freq: [58.3, 43.5], duration: 2.2,
+                        gain: 0.26, attack: 0.08,
+                        filter: { type: 'lowpass', freq: [700, 160], q: 2 }
+                    },
+                    {
+                        source: 'noise',
+                        duration: 1.6, gain: 0.22, attack: 0.25,
+                        filter: { type: 'bandpass', freq: [300, 1200], q: 0.8 }
+                    }
+                ]
+            },
+
             // End of run. Both are priority, and both are deliberately built
             // from the same three notes - the campaign resolving upward into a
             // major triad, or collapsing downward. Using one shape for both is
@@ -672,7 +749,8 @@ export const CONFIG = {
         pointsPerKill: {
             basic: 100,
             fast: 150,
-            armored: 250
+            armored: 250,
+            boss: 3000
         },
         accuracyBonus: 0.5         // Multiplier for accuracy (0.5 = 50% bonus at 100% accuracy)
     }
@@ -761,4 +839,35 @@ export function getWaveConfig(waveNumber) {
         // endless can still afford to keep building
         bonusCredits: Math.round(150 * (1 + past * 0.3))
     };
+}
+
+/**
+ * Whether a wave ends with a boss.
+ *
+ * Wave 5 caps the authored campaign, and then every fifth wave through endless
+ * mode. Derived rather than listed, so endless keeps producing them forever.
+ *
+ * @param {number} waveNumber
+ * @returns {boolean}
+ */
+export function isBossWave(waveNumber) {
+    return waveNumber > 0 && waveNumber % CONFIG.bosses.everyWaves === 0;
+}
+
+/**
+ * How much health a boss has, relative to its base, on a given wave.
+ *
+ * The first boss is the base value; each subsequent appearance adds a fixed
+ * fraction. Linear rather than compounding, because a compounding curve makes
+ * the tenth boss unkillable while the third is still trivial.
+ *
+ * @param {number} waveNumber
+ * @returns {number} Multiplier for CONFIG.enemies.boss.health
+ */
+export function getBossHealthScale(waveNumber) {
+    if (!isBossWave(waveNumber)) return 1;
+
+    const appearance = waveNumber / CONFIG.bosses.everyWaves; // 1, 2, 3, ...
+
+    return 1 + (appearance - 1) * CONFIG.bosses.healthScalePerAppearance;
 }

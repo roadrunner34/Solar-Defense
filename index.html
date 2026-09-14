@@ -36,6 +36,16 @@
             </div>
         </div>
 
+        <!-- Boss health. Bosses get this instead of the small floating bar
+             every other enemy carries - a 2400-health fight is not readable on
+             50 pixels. Shown only while a boss is alive. -->
+        <div id="boss-bar" hidden>
+            <div id="boss-name">Dreadnought</div>
+            <div class="boss-meter">
+                <div class="boss-fill" id="boss-fill"></div>
+            </div>
+        </div>
+
         <div id="hud-bottom">
             <div class="panel panel-credits">
                 <div class="panel-label">Credits</div>

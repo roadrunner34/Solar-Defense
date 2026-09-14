@@ -42,10 +42,11 @@ import { initUI, setupUICallbacks, updateHUD, showScreen, hideAllScreens,
          setHUDVisible, showDamageNumber, showFloatingText, showWaveAnnouncement,
          showWaveSummary, worldToScreen, initBuildMenu, initIntegrityPips,
          updateIntegrity, showBestRecord, showTooltip, setSettingsCallbacks,
-         getSettingsReturnScreen, isSettingsOpen } from './ui.js';
+         getSettingsReturnScreen, isSettingsOpen,
+         showBossBar, updateBossBar, hideBossBar } from './ui.js';
 import { initAudio, playSound, panFromScreenX, resetSoundCooldowns } from './audio.js';
 import { startMusic, stopMusic, setMusicWave, setMusicIntensity } from './music.js';
-import { CONFIG, getWaveConfig } from './config.js';
+import { CONFIG, getWaveConfig, isBossWave, getBossHealthScale } from './config.js';
 
 // ==================== GAME STATE ====================
 // The game can be in one of these states at any time
@@ -93,6 +94,9 @@ let waveEnemyQueue = []; // Queue of enemies to spawn
 // For wave transition timing
 let waveTransitionTimer = 0;
 const WAVE_TRANSITION_DELAY = 3; // Seconds between waves
+
+// The boss currently on the board, if any. Drives the HUD bar and the music.
+let activeBoss = null;
 
 // Hit-stop: the brief slow-motion stall on a kill. See applyHitStop().
 const HIT_STOP_SCALE = 0.18;
@@ -294,6 +298,10 @@ function startGame() {
     resetSelection();
     initEconomy();
 
+    // Any boss from the previous run is gone with it
+    activeBoss = null;
+    hideBossBar();
+
     // Restore the planet
     planetIntegrity = CONFIG.planet.integrity;
     initIntegrityPips(planetIntegrity);
@@ -459,6 +467,16 @@ function startWave(waveNumber) {
     // Shuffle queue slightly for variety (optional)
     // waveEnemyQueue = shuffleArray(waveEnemyQueue);
     
+    // A boss arrives last, after the wave it caps. Appended here rather than
+    // written into CONFIG.waves so endless mode keeps producing them forever.
+    if (isBossWave(waveNumber)) {
+        waveEnemyQueue.push({
+            type: 'boss',
+            spawnDelay: 2.5,
+            healthScale: getBossHealthScale(waveNumber)
+        });
+    }
+
     enemiesToSpawnThisWave = waveEnemyQueue.length;
     enemiesSpawnedThisWave = 0;
     enemiesClearedThisWave = 0;
@@ -608,7 +626,12 @@ function update(deltaTime) {
                 
                 // Spawn with random path for variety
                 const pathName = getRandomPathName();
-                spawnEnemy(nextEnemy.type, pathName);
+                const spawned = spawnEnemy(nextEnemy.type, pathName, {
+                    healthScale: nextEnemy.healthScale
+                });
+
+                if (spawned && spawned.isBoss) handleBossArrival(spawned);
+
                 enemiesSpawnedThisWave++;
             }
         }
@@ -705,8 +728,13 @@ function update(deltaTime) {
         enemiesClearedThisWave++;
         createEnemyDeathEffect(hit.position, hit.enemy.type);
 
-        // Armored enemies shake harder - the feedback should match the effort
-        const shakeAmount = hit.enemy.type === 'armored' ? 0.3 : 0.15;
+        // Bigger enemies shake harder - the feedback should match the effort.
+        // A boss has taken a minute of sustained fire to bring down, so its
+        // death gets an order more than an Armored enemy's.
+        let shakeAmount = 0.15;
+        if (hit.enemy.type === 'armored') shakeAmount = 0.3;
+        if (hit.enemy.isBoss) shakeAmount = 1.4;
+
         shakeCamera(shakeAmount, 10);
 
         applyHitStop(hit.enemy.type);
@@ -719,6 +747,9 @@ function update(deltaTime) {
         );
     });
     
+    // --- BOSS BAR ---
+    updateBossState();
+
     // --- HEALTH BARS ---
     // Update health bar screen positions
     projectHealthBars(camera);
@@ -810,6 +841,44 @@ function creditPlatform(hit) {
 }
 
 /**
+ * A boss has just spawned.
+ *
+ * @param {object} boss - The spawned enemy
+ */
+function handleBossArrival(boss) {
+    activeBoss = boss;
+
+    showBossBar(boss.displayName);
+    showWaveAnnouncement(currentWave, `${boss.displayName} inbound`);
+    playSound('bossArrival');
+
+    // The drone goes to full regardless of how deep the run is, then drops back
+    // to the wave's own intensity when the fight ends
+    setMusicIntensity(1, 1.5);
+}
+
+/**
+ * Keep the boss bar in step with the boss, and tear it down when it dies.
+ *
+ * Driven from the frame loop rather than from the kill handler because a boss
+ * can also leave by reaching the planet, and both exits have to clean up.
+ */
+function updateBossState() {
+    if (!activeBoss) return;
+
+    if (activeBoss.alive) {
+        updateBossBar(activeBoss.health / activeBoss.maxHealth);
+        return;
+    }
+
+    activeBoss = null;
+    hideBossBar();
+
+    // Hand the music back to the wave it belongs to
+    setMusicWave(currentWave);
+}
+
+/**
  * Play the firing sound for a shot that was just taken.
  *
  * Keyed on the projectile type rather than on what fired it, because that is
@@ -845,7 +914,9 @@ function playWeaponSound(projectileData) {
  * @param {string} enemyType - Bigger enemies earn a longer stall
  */
 function applyHitStop(enemyType) {
-    const duration = enemyType === 'armored' ? 0.085 : 0.045;
+    let duration = 0.045;
+    if (enemyType === 'armored') duration = 0.085;
+    if (enemyType === 'boss') duration = 0.22;
 
     // Overlapping kills extend the stall rather than restarting it, so a
     // missile clearing five enemies at once does not lock the game up

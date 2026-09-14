@@ -14,6 +14,7 @@ npm run test:watch   # re-run on change
 ```
 tests/
 ├── audio.test.js            # synth recipes, voice cap, cooldowns, panning
+├── boss.test.js             # boss schedule, scaling, resistance, HUD bar
 ├── config.test.js           # CONFIG contents, helpers, endless wave ramp
 ├── economy.test.js          # credits, score, accuracy, best-run persistence
 ├── effects.test.js          # the step-driven effect scheduler
