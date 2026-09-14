@@ -159,11 +159,21 @@ function createSun() {
  * @returns {THREE.CanvasTexture} The generated texture
  */
 function createFlareTexture(color, size) {
+    // Headless guard: outside a browser - or in a DOM without 2D canvas
+    // support, such as bare jsdom under Vitest - there is nothing to draw on.
+    // Return a blank texture so scene construction still succeeds in tests.
+    const canvas = typeof document !== 'undefined'
+        ? document.createElement('canvas')
+        : null;
+    const ctx = canvas ? canvas.getContext('2d') : null;
+
+    if (!ctx) {
+        return new THREE.Texture();
+    }
+
     // Create an HTML canvas to draw on
-    const canvas = document.createElement('canvas');
     canvas.width = size;
     canvas.height = size;
-    const ctx = canvas.getContext('2d');
     
     // Create a radial gradient (bright in center, fades to transparent)
     const gradient = ctx.createRadialGradient(

@@ -55,31 +55,6 @@
         </div>
     </div>
 
-    <!-- 
-        Three.js from CDN - we load it as a module so we can use ES6 imports
-        The 'importmap' tells the browser where to find Three.js when we write 'import * from "three"'
-    -->
-    <!-- 
-        Import maps tell the browser where to find modules when we use 'import from "name"'
-        We're adding:
-        - three: The core Three.js library
-        - three/addons/: Built-in Three.js examples/addons (including post-processing)
-        - postprocessing: PMNDRS post-processing library for advanced effects like bloom
-        - gsap: Animation library for smooth transitions
-        - maath: Math utilities for frame-rate independent animations
-    -->
-    <script type="importmap">
-    {
-        "imports": {
-            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
-            "postprocessing": "https://cdn.jsdelivr.net/npm/postprocessing@6.36.4/build/index.js",
-            "gsap": "https://cdn.jsdelivr.net/npm/gsap@3.12.5/+esm",
-            "maath": "https://cdn.jsdelivr.net/npm/maath@0.10.8/+esm"
-        }
-    }
-    </script>
-    
     <!-- Main game script - type="module" enables ES6 imports -->
     <script type="module" src="js/main.js"></script>
 </body>
