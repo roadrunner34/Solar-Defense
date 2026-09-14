@@ -82,6 +82,7 @@
             </p>
             <p class="screen-record" id="best-record" hidden></p>
             <button id="start-button">Start Game</button>
+            <button id="settings-start" class="secondary">Settings</button>
         </div>
 
         <!-- Victory Screen -->
@@ -109,7 +110,69 @@
                 &nbsp;·&nbsp; <kbd>F</kbd> frame stats
             </p>
             <button id="resume-button">Resume</button>
+            <button id="settings-pause" class="secondary">Settings</button>
             <button id="restart-pause" class="secondary">Restart</button>
+        </div>
+
+        <!-- Settings. Reachable from both the start screen and the pause
+             screen; the Back button returns to whichever opened it. Values are
+             persisted by js/settings.js and applied live. -->
+        <div id="settings-screen" class="screen">
+            <h1>Settings</h1>
+
+            <div class="settings-group">
+                <h2 class="settings-heading">Audio</h2>
+
+                <label class="setting" for="setting-master-volume">
+                    <span class="setting-label">Master volume</span>
+                    <input type="range" id="setting-master-volume"
+                           min="0" max="100" step="1">
+                    <output class="setting-value" for="setting-master-volume"></output>
+                </label>
+
+                <label class="setting" for="setting-sfx-volume">
+                    <span class="setting-label">Effects</span>
+                    <input type="range" id="setting-sfx-volume"
+                           min="0" max="100" step="1">
+                    <output class="setting-value" for="setting-sfx-volume"></output>
+                </label>
+
+                <label class="setting" for="setting-music-volume">
+                    <span class="setting-label">Music</span>
+                    <input type="range" id="setting-music-volume"
+                           min="0" max="100" step="1">
+                    <output class="setting-value" for="setting-music-volume"></output>
+                </label>
+            </div>
+
+            <div class="settings-group">
+                <h2 class="settings-heading">Display</h2>
+
+                <label class="setting" for="setting-quality">
+                    <span class="setting-label">Graphics quality</span>
+                    <select id="setting-quality">
+                        <option value="auto">Automatic</option>
+                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                        <option value="low">Low</option>
+                    </select>
+                </label>
+                <p class="setting-note">
+                    Automatic picks a tier from your device and steps it down if
+                    frames start dropping. Choosing one yourself turns that off.
+                </p>
+
+                <label class="setting" for="setting-reduced-motion">
+                    <span class="setting-label">Reduced motion</span>
+                    <select id="setting-reduced-motion">
+                        <option value="auto">Follow system</option>
+                        <option value="on">On</option>
+                        <option value="off">Off</option>
+                    </select>
+                </label>
+            </div>
+
+            <button id="settings-back">Back</button>
         </div>
     </div>
 

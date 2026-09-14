@@ -44,6 +44,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 import { CONFIG } from './config.js';
 import { addEffect } from './effects.js';
+import { getSetting } from './settings.js';
 
 // ==================== MODULE STATE ====================
 
@@ -194,8 +195,31 @@ export function detectQualityTier() {
  * @returns {string} The chosen tier
  */
 export function initQuality() {
-    activeTier = detectQualityTier();
+    // A stored quality preference outranks the device guess. 'auto' - the
+    // default - means the player has not expressed one, so detection wins.
+    const preferred = getSetting('quality');
+
+    activeTier = preferred && preferred !== 'auto' && CONFIG.graphics.tiers[preferred]
+        ? preferred
+        : detectQualityTier();
+
     return activeTier;
+}
+
+/**
+ * Whether the player has pinned a specific quality tier.
+ *
+ * The frame-time watchdog consults this before stepping the tier down. Without
+ * it, choosing 'high' on a machine that cannot quite hold 60fps would appear to
+ * do nothing: the setting would apply, the watchdog would notice the dropped
+ * frames a second later, and silently undo it. A setting that quietly reverts
+ * itself is worse than no setting.
+ *
+ * @returns {boolean}
+ */
+function qualityIsPinned() {
+    const preferred = getSetting('quality');
+    return Boolean(preferred && preferred !== 'auto');
 }
 
 /**
@@ -385,6 +409,9 @@ export function sampleFrame(timestamp) {
         frameSamples.length = 0;
         return;
     }
+
+    // The player's explicit choice outranks the watchdog - see qualityIsPinned()
+    if (qualityIsPinned()) return;
 
     if (medianOf(frameSamples) > CONFIG.graphics.frameBudgetMs) {
         if (activeTier === 'high') {

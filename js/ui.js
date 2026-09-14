@@ -27,6 +27,7 @@ import { getCredits, getScore, getAccuracy, getGameStats, canAfford } from './ec
 import { getEnemyCount } from './enemy.js';
 import { CONFIG } from './config.js';
 import { playSound } from './audio.js';
+import { getSetting, setSetting, getAllSettings } from './settings.js';
 import gsap from 'gsap';
 
 // Cache DOM element references (faster than querying each frame)
@@ -83,7 +84,22 @@ export function initUI() {
     elements.bestRecord = document.getElementById('best-record');
     elements.continueEndless = document.getElementById('continue-endless');
 
+    // Settings screen
+    elements.settingsScreen = document.getElementById('settings-screen');
+    elements.settingsStart = document.getElementById('settings-start');
+    elements.settingsPause = document.getElementById('settings-pause');
+    elements.settingsBack = document.getElementById('settings-back');
+
+    elements.settingInputs = {
+        masterVolume: document.getElementById('setting-master-volume'),
+        sfxVolume: document.getElementById('setting-sfx-volume'),
+        musicVolume: document.getElementById('setting-music-volume'),
+        quality: document.getElementById('setting-quality'),
+        reducedMotion: document.getElementById('setting-reduced-motion')
+    };
+
     wireButtonClickSound();
+    wireSettingsControls();
 }
 
 /**
@@ -115,6 +131,148 @@ function wireButtonClickSound() {
     });
 }
 
+// ==================== SETTINGS SCREEN ====================
+
+/**
+ * Which screen the settings screen was opened from, so Back can return there.
+ *
+ * Settings is reachable from both the start screen and the pause screen, and
+ * hard-coding the return would strand a paused player on the main menu with
+ * their run still running behind it.
+ */
+let settingsReturnScreen = 'start';
+
+/**
+ * Volume settings, and the sliders that drive them.
+ *
+ * Sliders work in 0-100 because that is what reads well in a UI; the store
+ * keeps 0-1 because that is what a GainNode wants.
+ */
+const VOLUME_SETTINGS = ['masterVolume', 'sfxVolume', 'musicVolume'];
+
+/**
+ * Wire the settings controls to the settings store.
+ *
+ * Every control writes through setSetting(), which validates, persists, and
+ * notifies listeners - so the audio graph follows a slider while it is being
+ * dragged rather than on the next sound.
+ */
+function wireSettingsControls() {
+    const inputs = elements.settingInputs;
+    if (!inputs) return;
+
+    for (const key of VOLUME_SETTINGS) {
+        const slider = inputs[key];
+        if (!slider || slider.dataset.wired) continue;
+
+        slider.dataset.wired = 'true';
+
+        // 'input' rather than 'change', so dragging is audible as it happens
+        slider.addEventListener('input', () => {
+            setSetting(key, Number(slider.value) / 100);
+            updateSettingsReadout(key);
+        });
+    }
+
+    for (const key of ['quality', 'reducedMotion']) {
+        const select = inputs[key];
+        if (!select || select.dataset.wired) continue;
+
+        select.dataset.wired = 'true';
+
+        select.addEventListener('change', () => {
+            setSetting(key, select.value);
+
+            if (settingsCallbacks.onSettingApplied) {
+                settingsCallbacks.onSettingApplied(key, select.value);
+            }
+        });
+    }
+}
+
+/**
+ * Callbacks for settings that need something outside ui.js to act on them -
+ * a quality change has to reach the renderer.
+ */
+let settingsCallbacks = { onSettingApplied: null };
+
+/**
+ * @param {object} callbacks
+ * @param {Function} [callbacks.onSettingApplied] - Called with (key, value)
+ */
+export function setSettingsCallbacks(callbacks = {}) {
+    settingsCallbacks = { ...settingsCallbacks, ...callbacks };
+}
+
+/**
+ * Push the stored settings into the controls.
+ *
+ * Called whenever the screen is shown rather than only at startup, so the
+ * controls always reflect the store even if something else changed it.
+ */
+function syncSettingsControls() {
+    const inputs = elements.settingInputs;
+    if (!inputs) return;
+
+    const settings = getAllSettings();
+
+    for (const key of VOLUME_SETTINGS) {
+        if (!inputs[key]) continue;
+
+        inputs[key].value = String(Math.round(settings[key] * 100));
+        updateSettingsReadout(key);
+    }
+
+    if (inputs.quality) inputs.quality.value = settings.quality;
+    if (inputs.reducedMotion) inputs.reducedMotion.value = settings.reducedMotion;
+}
+
+/**
+ * Update the percentage shown beside a volume slider.
+ *
+ * @param {string} key - A volume setting key
+ */
+function updateSettingsReadout(key) {
+    const slider = elements.settingInputs?.[key];
+    if (!slider) return;
+
+    const readout = slider.parentElement?.querySelector('.setting-value');
+    if (readout) readout.textContent = `${Math.round(Number(slider.value))}%`;
+}
+
+/**
+ * Open the settings screen, remembering where to go back to.
+ *
+ * @param {string} returnScreen - Screen name to return to on Back
+ */
+export function showSettings(returnScreen = 'start') {
+    settingsReturnScreen = returnScreen;
+    syncSettingsControls();
+    showScreen('settings');
+}
+
+/**
+ * The screen the settings screen should return to.
+ * @returns {string}
+ */
+export function getSettingsReturnScreen() {
+    return settingsReturnScreen;
+}
+
+/**
+ * Whether the settings screen is currently showing.
+ *
+ * Used by the Escape handler, which unwinds one layer at a time and must close
+ * settings before it considers pausing or unpausing.
+ *
+ * @returns {boolean}
+ */
+export function isSettingsOpen() {
+    return Boolean(
+        elements.settingsScreen && elements.settingsScreen.classList.contains('active')
+    );
+}
+
 /**
  * Whether the player has asked their system to reduce motion.
  *
@@ -125,6 +283,15 @@ function wireButtonClickSound() {
  * @returns {boolean}
  */
 function prefersReducedMotion() {
+    // An explicit choice in the settings screen wins, in both directions: a
+    // player who wants the animations despite a system-wide reduce preference
+    // is as legitimate as one who wants them off without setting it globally.
+    const preference = getSetting('reducedMotion');
+
+    if (preference === 'on') return true;
+    if (preference === 'off') return false;
+
+    // 'auto' - follow the system
     return typeof window !== 'undefined' &&
         typeof window.matchMedia === 'function' &&
         window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -258,6 +425,23 @@ export function setupUICallbacks(callbacks) {
     if (elements.continueEndless) {
         elements.continueEndless.addEventListener('click', () => {
             callbacks.onContinueEndless && callbacks.onContinueEndless();
+        });
+    }
+
+    // Settings is reachable from two places, and Back returns to whichever one
+    // opened it - a paused player must not be dumped onto the main menu with
+    // their run still live behind it.
+    if (elements.settingsStart) {
+        elements.settingsStart.addEventListener('click', () => showSettings('start'));
+    }
+
+    if (elements.settingsPause) {
+        elements.settingsPause.addEventListener('click', () => showSettings('pause'));
+    }
+
+    if (elements.settingsBack) {
+        elements.settingsBack.addEventListener('click', () => {
+            showScreen(getSettingsReturnScreen());
         });
     }
 }
@@ -411,6 +595,12 @@ export function showScreen(screenName) {
             if (elements.pauseScreen) {
                 elements.pauseScreen.classList.add('active');
                 animateScreenIn(elements.pauseScreen);
+            }
+            break;
+        case 'settings':
+            if (elements.settingsScreen) {
+                elements.settingsScreen.classList.add('active');
+                animateScreenIn(elements.settingsScreen);
             }
             break;
     }
@@ -576,8 +766,9 @@ function animateDefeatScreen(screen) {
  * Hide all game screens
  */
 export function hideAllScreens() {
-    [elements.startScreen, elements.victoryScreen, 
-     elements.defeatScreen, elements.pauseScreen].forEach(screen => {
+    [elements.startScreen, elements.victoryScreen,
+     elements.defeatScreen, elements.pauseScreen,
+     elements.settingsScreen].forEach(screen => {
         if (screen) screen.classList.remove('active');
     });
 }

@@ -595,9 +595,138 @@ body {
 .screen button:focus-visible,
 .build-option:focus-visible,
 .upgrade-button:focus-visible,
-.sell-button:focus-visible {
+.sell-button:focus-visible,
+.setting input:focus-visible,
+.setting select:focus-visible {
     outline: 2px solid var(--accent-bright);
     outline-offset: 2px;
+}
+
+/* ==================== SETTINGS SCREEN ==================== */
+
+/* Settings is the one screen that is a form rather than a statement, so it
+   drops the centred-prose layout the others use and goes to a fixed-width
+   column of labelled rows. */
+
+#settings-screen h1 {
+    font-size: clamp(26px, 4.5vw, 40px);
+}
+
+.settings-group {
+    width: min(460px, 100%);
+    margin-bottom: var(--gap-4);
+    padding: var(--gap-3) var(--gap-4) var(--gap-4);
+    text-align: left;
+    background: var(--surface-1);
+    border: 1px solid var(--accent-line);
+    border-radius: var(--radius);
+}
+
+.settings-heading {
+    margin-bottom: var(--gap-3);
+    color: var(--accent-dim);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.8px;
+    text-transform: uppercase;
+}
+
+/* A row is label / control / readout. The grid keeps every control in the same
+   column regardless of how long its label is - ragged controls read as a bug. */
+.setting {
+    display: grid;
+    grid-template-columns: 1fr 160px auto;
+    align-items: center;
+    gap: var(--gap-3);
+    margin-bottom: var(--gap-3);
+    cursor: pointer;
+}
+
+.setting:last-child {
+    margin-bottom: 0;
+}
+
+.setting-label {
+    color: var(--text);
+    font-size: 14px;
+}
+
+/* Tabular figures so the percentage does not jitter the layout as it counts */
+.setting-value {
+    min-width: 3.2em;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+.setting-note {
+    margin-top: calc(var(--gap-2) * -1);
+    margin-bottom: var(--gap-3);
+    color: var(--text-faint) !important;
+    font-size: 12px !important;
+    text-align: left;
+}
+
+.setting select {
+    grid-column: 2 / span 2;
+    padding: 7px 9px;
+    color: var(--text);
+    background: var(--surface-3);
+    border: 1px solid var(--accent-line);
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 13px;
+}
+
+.setting select:hover {
+    border-color: var(--accent);
+}
+
+/* Range inputs are styled per-engine and share almost nothing, so the track and
+   thumb are declared twice. appearance:none is what removes the OS widget and
+   lets the track below show through. */
+.setting input[type="range"] {
+    width: 100%;
+    height: 4px;
+    appearance: none;
+    -webkit-appearance: none;
+    background: var(--surface-3);
+    border-radius: 2px;
+    cursor: pointer;
+    outline-offset: 6px;
+}
+
+.setting input[type="range"]::-webkit-slider-thumb {
+    width: 15px;
+    height: 15px;
+    appearance: none;
+    -webkit-appearance: none;
+    background: var(--accent);
+    border: none;
+    border-radius: 50%;
+    box-shadow: var(--glow-soft);
+    cursor: pointer;
+}
+
+.setting input[type="range"]::-moz-range-thumb {
+    width: 15px;
+    height: 15px;
+    background: var(--accent);
+    border: none;
+    border-radius: 50%;
+    box-shadow: var(--glow-soft);
+    cursor: pointer;
+}
+
+.setting input[type="range"]:hover::-webkit-slider-thumb {
+    background: var(--accent-bright);
+}
+
+.setting input[type="range"]:hover::-moz-range-thumb {
+    background: var(--accent-bright);
 }
 
 #victory-screen h1 {
@@ -871,6 +1000,19 @@ body {
 
     .screen button {
         min-width: min(280px, 80vw);
+    }
+
+    /* At phone width the three-column settings row cannot hold a readable
+       label and a usable slider side by side, so the control drops below its
+       label and the readout tucks up beside the label instead. */
+    .setting {
+        grid-template-columns: 1fr auto;
+        gap: var(--gap-1) var(--gap-2);
+    }
+
+    .setting input[type="range"],
+    .setting select {
+        grid-column: 1 / span 2;
     }
 }
 

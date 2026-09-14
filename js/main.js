@@ -18,7 +18,7 @@ import * as THREE from 'three';
 // in its own module. main.js only needs to start it, step it and resize it.
 import { initQuality, initPostProcessing, renderFrame, resizePostProcessing, sampleFrame,
          flashDamageVignette, resetPostProcessing, setQualityTier,
-         getQualityTier, getFrameStats } from './postprocessing.js';
+         getQualityTier, getFrameStats, detectQualityTier } from './postprocessing.js';
 
 // Import all our game systems
 import { createScene, scene, updateScene, hitPlanetShield, resetPlanetShield } from './scene.js';
@@ -41,7 +41,8 @@ import { initEconomy, recordKill, recordShot, recordHit, awardWaveBonus,
 import { initUI, setupUICallbacks, updateHUD, showScreen, hideAllScreens,
          setHUDVisible, showDamageNumber, showFloatingText, showWaveAnnouncement,
          showWaveSummary, worldToScreen, initBuildMenu, initIntegrityPips,
-         updateIntegrity, showBestRecord, showTooltip } from './ui.js';
+         updateIntegrity, showBestRecord, showTooltip, setSettingsCallbacks,
+         getSettingsReturnScreen, isSettingsOpen } from './ui.js';
 import { initAudio, playSound, panFromScreenX, resetSoundCooldowns } from './audio.js';
 import { startMusic, stopMusic, setMusicWave, setMusicIntensity } from './music.js';
 import { CONFIG, getWaveConfig } from './config.js';
@@ -155,6 +156,14 @@ function init() {
         onContinueEndless: continueEndless
     });
 
+    // A quality change from the settings screen has to reach the renderer;
+    // ui.js knows nothing about the composer.
+    setSettingsCallbacks({
+        onSettingApplied: (key, value) => {
+            if (key === 'quality') applyQualitySetting(value);
+        }
+    });
+
     // Clicking a placed platform or the starbase opens the stats/upgrade panel
     initSelection();
 
@@ -170,10 +179,15 @@ function init() {
     // Handle pause with Escape key
     window.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
-            // Escape unwinds one layer at a time: placement first, then the
-            // selection panel, and only pauses when there is nothing else to
-            // dismiss. Jumping straight to pause would make it impossible to
-            // close a panel without stopping the game.
+            // Escape unwinds one layer at a time: settings first, then
+            // placement, then the selection panel, and only pauses when there
+            // is nothing else to dismiss. Jumping straight to pause would make
+            // it impossible to close a panel without stopping the game.
+            if (isSettingsOpen()) {
+                showScreen(getSettingsReturnScreen());
+                return;
+            }
+
             if (isInPlacementMode()) {
                 exitPlacementMode();
                 return;
@@ -888,6 +902,23 @@ function updateDebugReadout() {
 }
 
 // ==================== UTILITY FUNCTIONS ====================
+
+/**
+ * Apply a quality choice made in the settings screen.
+ *
+ * 'auto' hands the decision back to the device detection, and re-arms the
+ * frame-time watchdog by way of postprocessing.js consulting the setting. Any
+ * other value pins the tier - see qualityIsPinned() over there.
+ *
+ * Only the live knobs move: pixel ratio and bloom. MSAA sample count and scene
+ * density are baked in at build time, so a tier change mid-run cannot undo
+ * those without a reload.
+ *
+ * @param {string} value - 'auto', 'high', 'medium' or 'low'
+ */
+function applyQualitySetting(value) {
+    setQualityTier(value === 'auto' ? detectQualityTier() : value);
+}
 
 /**
  * Handle window resize
