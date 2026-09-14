@@ -33,6 +33,7 @@ import { playSound } from './audio.js';
 import { TARGETING_MODES, TARGETING_LABELS, DEFAULT_TARGETING } from './targeting.js';
 import {
     UPGRADE_STATS,
+    getUpgradeStats,
     describeUpgrades,
     purchaseUpgrade,
     getUpgradeTier,
@@ -233,24 +234,74 @@ export function refreshPanel() {
  * @returns {object} View object for ui.showSelectionPanel
  */
 function describePlatform(platform) {
-    const base = getPlatformConfig(platform.type);
+    const isAura = platform.behaviour === 'aura';
 
     return {
         name: formatName(platform.type),
 
-        stats: [
-            statRow('Damage', platform.damage, base.damage, platform, 'damage'),
-            statRow('Range', platform.range, base.range, platform, 'range'),
-            statRow('Fire rate', platform.fireRate, base.fireRate, platform, 'fireRate', '/s'),
-            { label: 'Kills', value: String(platform.kills) },
-            { label: 'Shots fired', value: String(platform.shotsFired) },
-            { label: 'Damage dealt', value: String(Math.round(platform.damageDealt)) }
-        ],
+        stats: isAura ? describeAuraStats(platform) : describeWeaponStats(platform),
 
         upgrades: describeUpgrades(platform),
-        targeting: describeTargeting(platform.targeting || DEFAULT_TARGETING),
+
+        // Support platforms do not choose a target - they affect everything in
+        // range - so the targeting row is omitted rather than shown inert
+        targeting: isAura
+            ? null
+            : describeTargeting(platform.targeting || DEFAULT_TARGETING),
+
         sellValue: getSellValue(platform)
     };
+}
+
+/**
+ * Stat rows for a weapon platform.
+ *
+ * @param {object} platform
+ * @returns {Array<object>}
+ */
+function describeWeaponStats(platform) {
+    const base = getPlatformConfig(platform.type);
+
+    return [
+        statRow('Damage', platform.damage, base.damage, platform, 'damage'),
+        statRow('Range', platform.range, base.range, platform, 'range'),
+        statRow('Fire rate', platform.fireRate, base.fireRate, platform, 'fireRate', '/s'),
+        { label: 'Kills', value: String(platform.kills) },
+        { label: 'Shots fired', value: String(platform.shotsFired) },
+        { label: 'Damage dealt', value: String(Math.round(platform.damageDealt)) }
+    ];
+}
+
+/**
+ * Stat rows for a support platform.
+ *
+ * A different set entirely, because the weapon rows would all read zero: no
+ * damage, no fire rate, no shots, no kills. Showing six zeroes would make a
+ * working platform look broken.
+ *
+ * Instead it reports what it actually does, plus a live count of how many
+ * enemies it is currently affecting - which is the only direct evidence a
+ * player has that a platform doing no damage is earning its place.
+ *
+ * @param {object} platform
+ * @returns {Array<object>}
+ */
+function describeAuraStats(platform) {
+    const base = getPlatformConfig(platform.type);
+
+    return [
+        statRow(
+            'Strength',
+            // Slow magnitude reads as a percentage; anything else is flat
+            platform.statusType === 'slow' ? platform.magnitude * 100 : platform.magnitude,
+            platform.statusType === 'slow' ? base.magnitude * 100 : base.magnitude,
+            platform, 'magnitude',
+            platform.statusType === 'slow' ? '%' : ''
+        ),
+        statRow('Range', platform.range, base.range, platform, 'range'),
+        statRow('Duration', platform.duration, base.duration, platform, 'duration', 's'),
+        { label: 'Affecting', value: String(platform.affecting || 0) }
+    ];
 }
 
 /**
@@ -345,7 +396,10 @@ function formatName(type) {
  * @param {string} stat - 'damage', 'range' or 'fireRate'
  */
 function handleUpgrade(stat) {
-    if (!selected || !UPGRADE_STATS.includes(stat)) return;
+    // Against the selected target's own stat list, not the weapon defaults -
+    // a Gravity Well upgrades magnitude and duration, and checking against
+    // damage/range/fireRate would silently reject every one of its buttons
+    if (!selected || !getUpgradeStats(selected).includes(stat)) return;
 
     let result;
 
@@ -387,7 +441,7 @@ function handleUpgrade(stat) {
  * @param {object} platform
  */
 function applyUpgradeVisual(platform) {
-    const totalTiers = UPGRADE_STATS.reduce(
+    const totalTiers = getUpgradeStats(platform).reduce(
         (sum, stat) => sum + getUpgradeTier(platform, stat), 0
     );
 

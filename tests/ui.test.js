@@ -42,14 +42,46 @@ describe('initBuildMenu()', () => {
         expect(types).toEqual(Object.keys(CONFIG.platforms));
     });
 
-    it('shows each platform\'s real cost and stats', () => {
+    it('shows every platform\'s real cost', () => {
         initBuildMenu(() => {});
 
         for (const [type, config] of Object.entries(CONFIG.platforms)) {
+            expect(buttonFor(type).textContent).toContain(String(config.cost));
+        }
+    });
+
+    it('describes a weapon by its damage and range', () => {
+        initBuildMenu(() => {});
+
+        for (const [type, config] of Object.entries(CONFIG.platforms)) {
+            if (config.blurb) continue; // Support platforms describe themselves
+
             const text = buttonFor(type).textContent;
-            expect(text).toContain(String(config.cost));
             expect(text).toContain(String(config.damage));
             expect(text).toContain(String(config.range));
+        }
+    });
+
+    // A support platform has no damage and no fire rate. Running it through the
+    // weapon template would print "undefined dmg" under the Gravity Well, so it
+    // carries its own summary in the config instead.
+    it('describes a support platform by its own blurb', () => {
+        initBuildMenu(() => {});
+
+        for (const [type, config] of Object.entries(CONFIG.platforms)) {
+            if (!config.blurb) continue;
+
+            const text = buttonFor(type).textContent;
+            expect(text).toContain(config.blurb);
+            expect(text).not.toContain('undefined');
+        }
+    });
+
+    it('never prints undefined for any platform', () => {
+        initBuildMenu(() => {});
+
+        for (const type of Object.keys(CONFIG.platforms)) {
+            expect(buttonFor(type).textContent).not.toContain('undefined');
         }
     });
 

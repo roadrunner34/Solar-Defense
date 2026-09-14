@@ -25,6 +25,8 @@ import { getUpgradeInvestment } from './upgrade.js';
 import { createHullMaterial } from './materials.js';
 import { getPlatformConfig, CONFIG } from './config.js';
 import { selectTarget, DEFAULT_TARGETING, isTargetingMode } from './targeting.js';
+import { getEnemiesInRange, refreshStatusVisual } from './enemy.js';
+import { applyStatus } from './status.js';
 import { spendCredits, addCredits, canAfford } from './economy.js';
 import { createMuzzleSparks } from './particles.js';
 import { updateTurretAim } from './turret.js';
@@ -581,9 +583,27 @@ export function createPlatform(type, position) {
         rotationSpeed: config.rotationSpeed,
         projectileType: config.projectileType || 'laser',
 
+        // How this platform acts each frame: 'turret' acquires a target, aims
+        // and fires; 'aura' applies a status effect to everything in range.
+        // Defaults to 'turret' so every existing platform type is unaffected.
+        behaviour: config.behaviour || 'turret',
+
+        // Support-platform stats. Undefined on weapons, which is what the
+        // selection panel and build menu branch on.
+        statusType: config.statusType,
+        magnitude: config.magnitude,
+        duration: config.duration,
+
+        // Which stats this platform can upgrade. Weapons leave this undefined
+        // and fall back to the damage/range/fireRate default.
+        upgradeStats: config.upgradeStats,
+
         // Combat state
         timeSinceLastShot: 0,    // Track firing cooldown
         currentTarget: null,     // Currently targeted enemy
+
+        // Seconds since an aura platform last applied its effect
+        timeSinceLastTick: 0,
 
         // Which enemy this platform prefers, of those in range. Defaults to the
         // pre-Sprint-5 behaviour so an untouched platform behaves as it always
@@ -616,20 +636,29 @@ export function createPlatform(type, position) {
 }
 
 /**
- * Creates a basic 3D mesh for a platform
- * 
- * For Task 1.2, we create a simple visual placeholder.
- * This will be replaced with distinct visuals in Tasks 1.3 and 1.4.
- * 
- * We use a simple box/cylinder combination to represent the platform.
- * 
+ * Mesh builders, keyed by platform type.
+ *
+ * This was a ternary on the type, which was one of only two places in the
+ * codebase where adding a platform type meant editing code rather than the
+ * config - the build menu, the hotkeys and the stats all derive themselves from
+ * CONFIG.platforms. A lookup table restores that property: a new type needs a
+ * config entry and a builder registered here, and nothing else.
+ */
+const PLATFORM_MESH_BUILDERS = {
+    laserBattery: createLaserBatteryMesh,
+    missileLauncher: createMissileLauncherMesh,
+    gravityWell: createGravityWellMesh
+};
+
+/**
+ * Creates the 3D mesh for a platform type.
+ *
  * @param {string} type - Platform type
  * @returns {THREE.Group} The platform mesh group
  */
 function createPlatformMesh(type) {
-    return type === 'missileLauncher'
-        ? createMissileLauncherMesh()
-        : createLaserBatteryMesh();
+    const build = PLATFORM_MESH_BUILDERS[type] || createLaserBatteryMesh;
+    return build();
 }
 
 /**
@@ -795,6 +824,111 @@ function createMissileLauncherMesh() {
     // Where projectiles spawn, at the centre of the tube bank
     addMuzzle(tubes, 0, 1.8);
     
+    return platformGroup;
+}
+
+/**
+ * Builds the Gravity Well mesh.
+ *
+ * Read as: not a gun. This is the first platform in the game that does no
+ * damage, and it has to say so from across the map - so it has no turret, no
+ * barrel and no muzzle, which is the silhouette the eye uses to tell weapons
+ * apart from everything else.
+ *
+ * Instead: a dark sphere that reads as an absence rather than a device, held
+ * inside two rings that counter-rotate. The rings are named so updatePlatforms()
+ * can spin them - a static support platform looks broken, because there is no
+ * projectile to prove it is running.
+ *
+ * @returns {THREE.Group} The platform mesh group
+ */
+function createGravityWellMesh() {
+    const platformGroup = new THREE.Group();
+
+    // === BASE ===
+    // Squat and wide, so it reads as an emplacement rather than a weapon
+    const baseGeometry = new THREE.CylinderGeometry(2.0, 2.4, 0.4, 12);
+    const baseMaterial = createHullMaterial({
+        color: 0x3c3450,          // Cold violet-grey, unlike either weapon
+        emissive: 0x120c20,
+        flatShading: true
+    });
+    platformGroup.add(new THREE.Mesh(baseGeometry, baseMaterial));
+
+    // === THE WELL ===
+    // Deliberately almost black and barely lit. Every other emissive thing in
+    // this game glows outward; this one should look like it is doing the
+    // opposite, which is the whole idea of the platform.
+    const coreGeometry = new THREE.SphereGeometry(0.85, 20, 16);
+    const coreMaterial = new THREE.MeshBasicMaterial({
+        color: new THREE.Color(0.03, 0.01, 0.09)
+    });
+
+    const core = new THREE.Mesh(coreGeometry, coreMaterial);
+    core.position.y = 1.5;
+    platformGroup.add(core);
+
+    // A violet halo just outside the core, so the black sphere is legible
+    // against the black of space
+    const haloGeometry = new THREE.SphereGeometry(1.05, 20, 16);
+    const haloMaterial = new THREE.MeshBasicMaterial({
+        color: new THREE.Color(0.7, 0.25, 1.8), // HDR violet, caught by bloom
+        transparent: true,
+        opacity: 0.22,
+        side: THREE.BackSide
+    });
+
+    const halo = new THREE.Mesh(haloGeometry, haloMaterial);
+    halo.position.y = 1.5;
+    platformGroup.add(halo);
+
+    // === COUNTER-ROTATING RINGS ===
+    const rings = new THREE.Group();
+    rings.name = 'rings';
+    rings.position.y = 1.5;
+    platformGroup.add(rings);
+
+    const ringMaterial = new THREE.MeshBasicMaterial({
+        color: new THREE.Color(1.1, 0.45, 2.2), // HDR violet
+        transparent: true,
+        opacity: 0.75
+    });
+
+    // Two rings at different radii and tilts. Named individually so the update
+    // loop can turn them opposite ways - matched rotation reads as one rigid
+    // object, opposed rotation reads as a field being held open.
+    const outer = new THREE.Mesh(
+        new THREE.TorusGeometry(1.75, 0.07, 8, 40),
+        ringMaterial
+    );
+    outer.name = 'ringOuter';
+    outer.rotation.x = Math.PI / 2;
+    rings.add(outer);
+
+    const inner = new THREE.Mesh(
+        new THREE.TorusGeometry(1.3, 0.05, 8, 32),
+        ringMaterial
+    );
+    inner.name = 'ringInner';
+    inner.rotation.x = Math.PI / 2.6;
+    rings.add(inner);
+
+    // === PYLONS ===
+    // Three struts holding the core clear of the base
+    const pylonGeometry = new THREE.BoxGeometry(0.16, 1.5, 0.16);
+    const pylonMaterial = createHullMaterial({
+        color: 0x4a4060,
+        emissive: 0x0e0818
+    });
+
+    for (let i = 0; i < 3; i++) {
+        const angle = (i / 3) * Math.PI * 2;
+        const pylon = new THREE.Mesh(pylonGeometry, pylonMaterial);
+        pylon.position.set(Math.cos(angle) * 1.1, 0.75, Math.sin(angle) * 1.1);
+        pylon.rotation.y = -angle;
+        platformGroup.add(pylon);
+    }
+
     return platformGroup;
 }
 
@@ -993,34 +1127,117 @@ export function firePlatformProjectile(platform, target) {
  */
 export function updatePlatforms(deltaTime) {
     const firedProjectiles = [];
-    
+
     for (const platform of platforms) {
         if (!platform.alive) continue;
-        
-        platform.timeSinceLastShot += deltaTime;
-        
-        const target = findTarget(platform);
-        platform.currentTarget = target;
-        
-        if (!target) continue;
-        
-        const turret = platform.mesh.getObjectByName('turret');
-        const isAimed = updateTurretAim(
-            turret,
-            platform.position,
-            target.mesh.position,
-            platform.rotationSpeed,
-            deltaTime
-        );
-        
-        if (isAimed && platform.timeSinceLastShot >= 1 / platform.fireRate) {
-            platform.timeSinceLastShot = 0;
-            platform.shotsFired++;
-            firedProjectiles.push(firePlatformProjectile(platform, target));
+
+        // Not every platform is a gun. A support platform has no target, no
+        // barrel and nothing to fire - it applies an effect to an area - so the
+        // acquire/aim/fire sequence below is one behaviour among several rather
+        // than what every platform does.
+        if (platform.behaviour === 'aura') {
+            updateAuraPlatform(platform, deltaTime);
+            continue;
         }
+
+        const projectile = updateTurretPlatform(platform, deltaTime);
+        if (projectile) firedProjectiles.push(projectile);
     }
-    
+
     return firedProjectiles;
+}
+
+/**
+ * Step a weapon platform: acquire a target, turn toward it, fire.
+ *
+ * @param {object} platform
+ * @param {number} deltaTime
+ * @returns {object|null} Projectile data if it fired
+ */
+function updateTurretPlatform(platform, deltaTime) {
+    platform.timeSinceLastShot += deltaTime;
+
+    const target = findTarget(platform);
+    platform.currentTarget = target;
+
+    if (!target) return null;
+
+    const turret = platform.mesh.getObjectByName('turret');
+    const isAimed = updateTurretAim(
+        turret,
+        platform.position,
+        target.mesh.position,
+        platform.rotationSpeed,
+        deltaTime
+    );
+
+    if (isAimed && platform.timeSinceLastShot >= 1 / platform.fireRate) {
+        platform.timeSinceLastShot = 0;
+        platform.shotsFired++;
+        return firePlatformProjectile(platform, target);
+    }
+
+    return null;
+}
+
+/**
+ * Step a support platform: spin its rings, and periodically apply its effect to
+ * everything inside its radius.
+ *
+ * The effect is applied on a tick rather than every frame. Re-stamping the same
+ * status sixty times a second achieves nothing - applyStatus() refreshes rather
+ * than stacks - and scanning every enemy from every aura platform every frame
+ * is real work for no gain. The effect's duration is configured longer than the
+ * tick interval so an enemy inside the field stays continuously affected rather
+ * than flickering between ticks.
+ *
+ * @param {object} platform
+ * @param {number} deltaTime
+ */
+function updateAuraPlatform(platform, deltaTime) {
+    animateAuraVisual(platform, deltaTime);
+
+    platform.timeSinceLastTick += deltaTime;
+    if (platform.timeSinceLastTick < CONFIG.status.auraTickSeconds) return;
+
+    platform.timeSinceLastTick = 0;
+
+    const caught = getEnemiesInRange(platform.position, platform.range);
+
+    // Reported in the selection panel, so a platform that does no damage still
+    // has something to show for itself
+    platform.affecting = caught.length;
+
+    for (const enemy of caught) {
+        const applied = applyStatus(enemy, platform.statusType, {
+            duration: platform.duration,
+            magnitude: platform.magnitude
+        });
+
+        if (applied) refreshStatusVisual(enemy);
+    }
+}
+
+/**
+ * Turn a support platform's rings.
+ *
+ * Opposed directions on purpose: matched rotation reads as one rigid object
+ * turning, opposed rotation reads as a field being actively held open. A static
+ * support platform looks broken, because unlike a weapon it has no projectile
+ * to prove it is running.
+ *
+ * @param {object} platform
+ * @param {number} deltaTime
+ */
+function animateAuraVisual(platform, deltaTime) {
+    const rings = platform.mesh.getObjectByName('rings');
+    if (!rings) return;
+
+    const outer = rings.getObjectByName('ringOuter');
+    const inner = rings.getObjectByName('ringInner');
+
+    if (outer) outer.rotation.z += deltaTime * 0.9;
+    if (inner) inner.rotation.z -= deltaTime * 1.6;
 }
 
 /**

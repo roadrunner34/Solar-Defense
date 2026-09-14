@@ -23,8 +23,33 @@
 import { CONFIG } from './config.js';
 import { getCredits, spendCredits } from './economy.js';
 
-/** Stats that can be upgraded, in the order they appear in the panel. */
+/**
+ * The stats a weapon can upgrade, in the order they appear in the panel.
+ *
+ * This is the default, not the whole story. Support platforms upgrade something
+ * else entirely - a Gravity Well has no damage and no fire rate, and offering
+ * it three tiers of "Damage" would be offering it nothing. See getUpgradeStats().
+ */
 export const UPGRADE_STATS = ['damage', 'range', 'fireRate'];
+
+/**
+ * Which stats a particular target can upgrade.
+ *
+ * Targets declare their own list by carrying an `upgradeStats` array, copied
+ * from their platform config at build time. Anything that does not - every
+ * weapon platform, and the starbase - falls back to the weapon stats, so this
+ * change is invisible to everything that existed before support platforms did.
+ *
+ * @param {object} target - A platform, or the starbase view object
+ * @returns {Array<string>} The upgradeable stat names
+ */
+export function getUpgradeStats(target) {
+    const declared = target && target.upgradeStats;
+
+    return Array.isArray(declared) && declared.length > 0
+        ? declared
+        : UPGRADE_STATS;
+}
 
 /**
  * Read a target's tier for one stat.
@@ -143,7 +168,7 @@ export function purchaseUpgrade(target, stat, baseStats, applyValue) {
  *                  affordable: boolean, maxed: boolean, tier: number}>}
  */
 export function describeUpgrades(target) {
-    return UPGRADE_STATS.map((stat) => {
+    return getUpgradeStats(target).map((stat) => {
         const maxed = !canUpgrade(target, stat);
         const tier = getUpgradeTier(target, stat);
 
@@ -184,7 +209,12 @@ function romanTier(tier) {
 export function getUpgradeInvestment(target) {
     const baseCost = getBaseCost(target);
 
-    return UPGRADE_STATS.reduce((total, stat) => {
+    // Must iterate the target's OWN stats, not the weapon defaults. A Gravity
+    // Well upgrades magnitude and duration; counting only damage/range/fireRate
+    // would value every one of those tiers at zero, so selling a fully upgraded
+    // support platform would refund it as if it were straight off the build
+    // menu. upgrade.test.js guards this case directly.
+    return getUpgradeStats(target).reduce((total, stat) => {
         const tier = getUpgradeTier(target, stat);
 
         // Sum the cost of every tier bought so far, not just the current one

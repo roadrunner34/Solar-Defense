@@ -17,6 +17,8 @@ import { createEnemyMaterial } from './materials.js';
 import { createTrailParticle } from './particles.js';
 import { CONFIG, getEnemyConfig } from './config.js';
 import { getPositionOnPath, getDirectionOnPath, hasReachedPlanet, getPathLength } from './path.js';
+import { updateStatuses, getSpeedMultiplier, getArmorReduction, clearStatuses,
+         hasStatus, STATUS_SLOW } from './status.js';
 
 // Store all active enemies
 export const enemies = [];
@@ -103,6 +105,10 @@ export function spawnEnemy(type = 'basic', pathName = 'default') {
         
         alive: true,
         
+        // Temporary effects - slows and armour shred. Left undefined until
+        // something is actually applied; see the note in status.js.
+        statuses: null,
+
         // Handle for the pending hit-flash reset, so it can be cancelled
         flashTimeout: null,
         creditValue: CONFIG.economy.creditsPerKill[type] || 10,
@@ -210,6 +216,10 @@ export function updateEnemies(deltaTime) {
         
         if (!enemy.alive) continue;
         
+        // Run down any temporary effects first, so an effect that expires this
+        // frame does not get one last frame of influence
+        if (updateStatuses(enemy, deltaTime)) refreshStatusVisual(enemy);
+
         // Calculate how much to move based on speed and time.
         //
         // Progress is a 0-1 fraction of the path, so converting a world speed
@@ -217,7 +227,13 @@ export function updateEnemies(deltaTime) {
         // by a hardcoded 100 instead made an enemy's real speed depend on which
         // path it happened to be assigned - the three paths differ in length,
         // so identical enemies visibly travelled at different speeds.
-        const pathSpeed = (enemy.speed / enemy.pathLength) * deltaTime;
+        //
+        // The speed multiplier is what a Gravity Well acts on. It is read here
+        // rather than written onto enemy.speed so the base speed stays intact -
+        // an effect that modified the stored value could never be undone
+        // exactly, and two overlapping fields would compound into nonsense.
+        const currentSpeed = enemy.speed * getSpeedMultiplier(enemy);
+        const pathSpeed = (currentSpeed / enemy.pathLength) * deltaTime;
         enemy.pathProgress += pathSpeed;
         
         // Get new position on path
@@ -280,6 +296,48 @@ function emitThrusterTrail(enemy, deltaTime) {
         0.45 * enemy.mesh.scale.x,
         0.35
     );
+}
+
+// ==================== STATUS VISUALS ====================
+
+/**
+ * The cold blue a slowed enemy is tinted toward.
+ *
+ * A status effect the player cannot see is indistinguishable from a bug. A
+ * Gravity Well does no damage and spawns no projectile, so without a visible
+ * tell the only evidence it is working at all is a subtle change in how fast
+ * shapes cross the screen - which nobody can read. This is the feedback that
+ * makes the platform legible as *doing something*.
+ */
+const SLOW_TINT = new THREE.Color(0.35, 0.65, 1.0);
+
+/** How far toward the tint a slowed enemy goes. Short of 1, so enemy types stay
+ *  distinguishable from each other while slowed. */
+const SLOW_TINT_STRENGTH = 0.55;
+
+/**
+ * Match an enemy's appearance to the effects currently on it.
+ *
+ * Called when an effect is applied and when one expires, rather than every
+ * frame - this writes to a material, and there is no reason to do that sixty
+ * times a second for a value that changes twice.
+ *
+ * @param {object} enemy
+ */
+export function refreshStatusVisual(enemy) {
+    if (!enemy || !enemy.alive || !enemy.mesh || !enemy.mesh.material) return;
+
+    const material = enemy.mesh.material;
+
+    // Cache the enemy's real colour the first time we touch it, so the effect
+    // can be undone exactly rather than approximately
+    if (!enemy.baseColor) enemy.baseColor = material.color.clone();
+
+    if (hasStatus(enemy, STATUS_SLOW)) {
+        material.color.copy(enemy.baseColor).lerp(SLOW_TINT, SLOW_TINT_STRENGTH);
+    } else {
+        material.color.copy(enemy.baseColor);
+    }
 }
 
 /**
@@ -358,8 +416,13 @@ export function projectHealthBars(camera) {
 export function damageEnemy(enemy, damage) {
     if (!enemy.alive) return false;
     
-    // Apply armor reduction
-    const actualDamage = Math.max(1, damage - enemy.armor);
+    // Apply armor reduction, less whatever a Disruptor has stripped off.
+    //
+    // Floored at zero rather than allowed to go negative: shredding more armour
+    // than an enemy has should make it unarmoured, not give the attacker a
+    // bonus on top.
+    const effectiveArmor = Math.max(0, enemy.armor - getArmorReduction(enemy));
+    const actualDamage = Math.max(1, damage - effectiveArmor);
     enemy.health -= actualDamage;
     
     // Update health bar
@@ -435,6 +498,8 @@ function removeEnemy(enemy, index) {
     // Cancel any pending hit-flash reset before the material is disposed
     clearTimeout(enemy.flashTimeout);
     enemy.flashTimeout = null;
+
+    clearStatuses(enemy);
     
     // Remove health bar from DOM
     if (enemy.healthBar) {

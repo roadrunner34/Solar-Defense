@@ -10,6 +10,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 
 import {
     UPGRADE_STATS,
+    getUpgradeStats,
     getUpgradeTier,
     getUpgradeCost,
     canUpgrade,
@@ -247,5 +248,116 @@ describe('resetUpgrades()', () => {
 
         expect(getUpgradeTier(platform, 'damage')).toBe(0);
         expect(getUpgradeInvestment(platform)).toBe(0);
+    });
+});
+
+// ==================== PER-TYPE UPGRADE STATS ====================
+
+/**
+ * Support platforms upgrade a different set of stats to weapons. A Gravity Well
+ * has no damage and no fire rate, and offering it three tiers of "Damage" would
+ * be offering it nothing.
+ */
+describe('getUpgradeStats()', () => {
+    it('falls back to the weapon stats for anything that does not declare its own', () => {
+        expect(getUpgradeStats(target())).toEqual(UPGRADE_STATS);
+    });
+
+    it('falls back for the starbase, which carries no list', () => {
+        expect(getUpgradeStats({ isStarbase: true, upgradeTiers: {} }))
+            .toEqual(UPGRADE_STATS);
+    });
+
+    it('honours a declared list', () => {
+        const well = { cost: 75, upgradeTiers: {}, upgradeStats: ['magnitude', 'range'] };
+        expect(getUpgradeStats(well)).toEqual(['magnitude', 'range']);
+    });
+
+    it('ignores an empty list rather than offering no upgrades at all', () => {
+        expect(getUpgradeStats({ cost: 50, upgradeTiers: {}, upgradeStats: [] }))
+            .toEqual(UPGRADE_STATS);
+    });
+
+    it('describes exactly the declared stats', () => {
+        initEconomy(9999);
+
+        const well = {
+            cost: 75, upgradeTiers: {},
+            upgradeStats: ['magnitude', 'range', 'duration']
+        };
+
+        expect(describeUpgrades(well).map(row => row.id))
+            .toEqual(['magnitude', 'range', 'duration']);
+    });
+
+    it('has a multiplier curve and a label for every support stat', () => {
+        for (const stat of ['magnitude', 'duration']) {
+            expect(Array.isArray(CONFIG.upgrades.multipliers[stat])).toBe(true);
+            expect(CONFIG.upgrades.multipliers[stat].length)
+                .toBe(CONFIG.upgrades.maxTier + 1);
+            expect(typeof CONFIG.upgrades.labels[stat]).toBe('string');
+        }
+    });
+});
+
+/**
+ * The regression this whole section exists for.
+ *
+ * getUpgradeInvestment() feeds the sell refund, and it used to iterate the
+ * weapon stat list unconditionally. A Gravity Well upgraded three times would
+ * have valued every one of those tiers at zero, so selling it would have
+ * refunded it as though it were straight off the build menu - quietly
+ * destroying the player's credits.
+ */
+describe('getUpgradeInvestment() with per-type stats', () => {
+    const supportTarget = () => ({
+        cost: 75,
+        upgradeTiers: {},
+        upgradeStats: ['magnitude', 'range', 'duration']
+    });
+
+    it('counts tiers bought on the stats a support platform declares', () => {
+        initEconomy(9999);
+
+        const well = supportTarget();
+        purchaseUpgrade(well, 'magnitude', { magnitude: 0.4 }, () => {});
+
+        expect(getUpgradeInvestment(well)).toBeGreaterThan(0);
+    });
+
+    it('matches what was actually spent', () => {
+        initEconomy(9999);
+
+        const well = supportTarget();
+        const before = getCredits();
+
+        purchaseUpgrade(well, 'magnitude', { magnitude: 0.4 }, () => {});
+        purchaseUpgrade(well, 'duration', { duration: 0.6 }, () => {});
+
+        expect(getUpgradeInvestment(well)).toBe(before - getCredits());
+    });
+
+    it('sums across every declared stat', () => {
+        initEconomy(9999);
+
+        const one = supportTarget();
+        purchaseUpgrade(one, 'magnitude', { magnitude: 0.4 }, () => {});
+        const single = getUpgradeInvestment(one);
+
+        const two = supportTarget();
+        purchaseUpgrade(two, 'magnitude', { magnitude: 0.4 }, () => {});
+        purchaseUpgrade(two, 'range', { range: 55 }, () => {});
+
+        expect(getUpgradeInvestment(two)).toBeGreaterThan(single);
+    });
+
+    it('still values a weapon exactly as before', () => {
+        initEconomy(9999);
+
+        const platform = target();
+        purchaseUpgrade(platform, 'damage', BASE_STATS, () => {});
+
+        expect(getUpgradeInvestment(platform))
+            .toBe(Math.round(100 * CONFIG.upgrades.costFactor[1]));
     });
 });

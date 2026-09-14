@@ -329,6 +329,23 @@ export function getPlatformHotkey(type) {
 }
 
 /**
+ * The one-line stat summary under a build menu button.
+ *
+ * Weapons describe themselves as damage and range, which is what a player
+ * compares them on. A support platform has neither - printing "undefined dmg"
+ * under the Gravity Well would be the obvious bug here - so it carries its own
+ * `blurb` in the config instead.
+ *
+ * @param {object} config - An entry from CONFIG.platforms
+ * @returns {string}
+ */
+function describePlatformStats(config) {
+    if (config.blurb) return config.blurb;
+
+    return `${config.damage} dmg &middot; ${config.range} range`;
+}
+
+/**
  * Build the platform build menu.
  *
  * Buttons are generated from CONFIG.platforms rather than written into the
@@ -351,7 +368,7 @@ export function initBuildMenu(onSelect) {
             <span class="build-option-name">${formatPlatformName(type)}</span>
             <span class="build-option-key">${getPlatformHotkey(type)}</span>
             <span class="build-option-cost">${config.cost} cr</span>
-            <span class="build-option-stats">${config.damage} dmg &middot; ${config.range} range</span>
+            <span class="build-option-stats">${describePlatformStats(config)}</span>
         `;
         
         button.addEventListener('click', () => onSelect(type));

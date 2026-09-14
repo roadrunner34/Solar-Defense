@@ -54,7 +54,62 @@ export const CONFIG = {
             projectileType: 'missile',
             projectileSpeed: 35,    // Heavy ordnance - slower than the starbase's 50
             rotationSpeed: 1.5      // Turns slowly, so fast enemies can outrun its aim
+        },
+
+        // ---------- SUPPORT PLATFORMS ----------
+        // These do no damage at all. They are `behaviour: 'aura'` rather than
+        // 'turret': no target, no barrel, no projectile - they apply a status
+        // effect to everything inside their radius on a tick.
+        //
+        // A support platform is worth nothing on its own, which is the point.
+        // Both of these multiply what the guns around them are already doing,
+        // so their value is entirely a question of WHERE they go - which is the
+        // decision this whole game is about.
+
+        // Gravity Well - slows everything in range
+        gravityWell: {
+            behaviour: 'aura',
+            statusType: 'slow',
+
+            // Fraction of speed removed. Upgradeable, and capped in aggregate
+            // by status.minSpeedMultiplier so a field of these cannot stop a
+            // wave dead.
+            magnitude: 0.4,
+
+            // Seconds the slow lingers after an enemy leaves the radius. Longer
+            // than the tick interval, or an enemy would flicker in and out of
+            // being slowed between ticks.
+            duration: 0.6,
+
+            range: 55,
+            cost: 75,
+
+            // Support platforms have no damage or fire rate to show, so the
+            // build menu and selection panel read this instead
+            blurb: '-40% speed - 55 range',
+
+            // What this platform can have upgraded. Defaults to the weapon
+            // stats when absent - see getUpgradeStats() in upgrade.js.
+            upgradeStats: ['magnitude', 'range', 'duration']
         }
+    },
+
+    // ==================== STATUS EFFECTS ====================
+    status: {
+        // No matter how many Gravity Wells overlap, an enemy never drops below
+        // this fraction of its speed.
+        //
+        // Without a floor, enough overlapping fields stop a wave outright - and
+        // an enemy at zero speed never reaches the planet and never leaves, so
+        // the wave never ends and the run cannot progress. That is not
+        // difficulty, it is a softlock dressed up as a strategy.
+        minSpeedMultiplier: 0.25,
+
+        // How often an aura platform re-applies its effect, in seconds. Far
+        // slower than a frame because there is no benefit to re-stamping the
+        // same effect sixty times a second, and a full board of aura platforms
+        // scanning every enemy every frame is real work for no gain.
+        auraTickSeconds: 0.25
     },
 
     // ==================== PROJECTILES ====================
@@ -185,7 +240,16 @@ export const CONFIG = {
         multipliers: {
             damage:   [1, 1.4, 1.9, 2.5],
             range:    [1, 1.12, 1.26, 1.42],
-            fireRate: [1, 1.25, 1.55, 1.9]
+            fireRate: [1, 1.25, 1.55, 1.9],
+
+            // Support-platform stats. Magnitude climbs slowly on purpose: the
+            // aggregate slow is floored at status.minSpeedMultiplier anyway, so
+            // a steep curve would buy tiers that do nothing once two fields
+            // overlap. Duration climbs faster because extending how long an
+            // effect lingers past the radius is what turns one well into real
+            // area control.
+            magnitude: [1, 1.18, 1.34, 1.5],
+            duration:  [1, 1.3, 1.65, 2]
         },
 
         // Cost of reaching each tier, as a multiple of the structure's build
@@ -198,7 +262,9 @@ export const CONFIG = {
         labels: {
             damage: 'Damage',
             range: 'Range',
-            fireRate: 'Fire rate'
+            fireRate: 'Fire rate',
+            magnitude: 'Strength',
+            duration: 'Duration'
         },
 
         // The starbase has no build cost to scale from, so it gets a notional
