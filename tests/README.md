@@ -27,6 +27,7 @@ tests/
 ├── platform-combat.test.js  # targeting, firing, economy, selling
 ├── postprocessing.test.js   # quality tier selection and the watchdog
 ├── projectile.test.js       # laser vs missile, homing, splash damage
+├── run-summary.test.js      # run totals and the end-of-run breakdown
 ├── settings.test.js         # validation, persistence, change notifications
 ├── settings-screen.test.js  # the settings UI and where Back returns to
 ├── status.test.js           # slows, armour shred, and the Gravity Well

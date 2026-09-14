@@ -36,6 +36,17 @@ let comboTimer = 0;
 // The highest multiplier reached this run, for the end-of-run summary
 let bestComboMultiplier = 1;
 
+// ==================== RUN TOTALS ====================
+//
+// Lifetime figures for the end-of-run summary. Kept separately from the
+// running balance because what a player wants to see afterwards is what they
+// earned and what they spent, which the balance alone cannot tell them - a
+// player who finished on 40 credits might have earned 4,000 and spent 3,960.
+
+let killsByType = {};
+let creditsEarned = 0;
+let creditsSpent = 0;
+
 /**
  * Initialize economy for a new game
  * @param {number} startingCredits - Override starting credits (optional)
@@ -51,6 +62,9 @@ export function initEconomy(startingCredits = null) {
     comboChain = 0;
     comboTimer = 0;
     bestComboMultiplier = 1;
+    killsByType = {};
+    creditsEarned = 0;
+    creditsSpent = 0;
 }
 
 /**
@@ -77,9 +91,13 @@ export function getScore() {
 export function addCredits(amount, reason = 'unspecified') {
     credits += amount;
     creditsEarnedThisWave += amount;
-    
-    // Could log for debugging
-    // console.log(`Credits +${amount} (${reason}). Total: ${credits}`);
+
+    // A sale refund is money coming back, not money earned. Counting it would
+    // let a player inflate their "credits earned" total by building and selling
+    // the same platform repeatedly, which is the opposite of an achievement.
+    if (amount > 0 && !String(reason).startsWith('sell_')) {
+        creditsEarned += amount;
+    }
 }
 
 /**
@@ -90,6 +108,7 @@ export function addCredits(amount, reason = 'unspecified') {
 export function spendCredits(amount) {
     if (credits >= amount) {
         credits -= amount;
+        creditsSpent += amount;
         return true;
     }
     return false;
@@ -124,6 +143,7 @@ export function addScore(amount) {
  */
 export function recordKill(enemyType) {
     totalKills++;
+    killsByType[enemyType] = (killsByType[enemyType] || 0) + 1;
 
     // Extend the chain if the window is still open, otherwise start a new one
     comboChain = comboTimer > 0 ? comboChain + 1 : 1;
@@ -279,7 +299,15 @@ export function getGameStats() {
         totalKills,
         shotsFired,
         shotsHit,
-        accuracy: getAccuracy()
+        accuracy: getAccuracy(),
+
+        // A copy, so a caller cannot mutate the running tally by holding onto
+        // what getGameStats() handed them
+        killsByType: { ...killsByType },
+
+        creditsEarned,
+        creditsSpent,
+        bestCombo: bestComboMultiplier
     };
 }
 

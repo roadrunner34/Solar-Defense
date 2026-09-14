@@ -110,6 +110,8 @@
             <h1>Sector Cleared</h1>
             <p>The approach is quiet. For now.</p>
             <p class="screen-score">Final Score: <span id="final-score-victory">0</span></p>
+            <!-- Run breakdown, populated by ui.js -->
+            <div class="run-stats" id="run-stats-victory"></div>
             <button id="continue-endless">Hold the Line</button>
             <button id="restart-victory" class="secondary">Play Again</button>
         </div>
@@ -119,6 +121,8 @@
             <h1>Planet Lost</h1>
             <p>The last of the shielding failed.</p>
             <p class="screen-score">Final Score: <span id="final-score-defeat">0</span></p>
+            <!-- Run breakdown, populated by ui.js -->
+            <div class="run-stats" id="run-stats-defeat"></div>
             <button id="restart-defeat">Try Again</button>
         </div>
 
@@ -126,7 +130,7 @@
         <div id="pause-screen" class="screen">
             <h1>Paused</h1>
             <p class="screen-hint">
-                <kbd>1</kbd><kbd>2</kbd> build &nbsp;·&nbsp; <kbd>Esc</kbd> cancel or pause
+                <kbd>1</kbd>–<kbd>4</kbd> build &nbsp;·&nbsp; <kbd>Esc</kbd> cancel or pause
                 &nbsp;·&nbsp; <kbd>F</kbd> frame stats
             </p>
             <button id="resume-button">Resume</button>

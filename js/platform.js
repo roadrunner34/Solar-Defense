@@ -39,6 +39,11 @@ export const platforms = [];
 // removing a platform made the next one reuse a live id.
 let nextPlatformId = 0;
 
+// How many platforms have been built this run, including ones since sold.
+// platforms.length cannot answer this - it is the board right now, not the
+// history - and "platforms built" is a thing the end-of-run summary reports.
+let platformsBuiltThisRun = 0;
+
 // ==================== PLACEMENT CONSTANTS ====================
 // These define the rules for where platforms can be placed
 
@@ -631,6 +636,7 @@ export function createPlatform(type, position) {
     // Add platform to scene and tracking array
     scene.add(mesh);
     platforms.push(platform);
+    platformsBuiltThisRun++;
     
     return platform;
 }
@@ -1397,4 +1403,38 @@ export function clearAllPlatforms() {
     
     // Ensure array is empty
     platforms.length = 0;
+
+    // A cleared board is a new run
+    platformsBuiltThisRun = 0;
+}
+
+/**
+ * How many platforms were built this run, including ones since sold.
+ * @returns {number}
+ */
+export function getPlatformsBuilt() {
+    return platformsBuiltThisRun;
+}
+
+/**
+ * The platform that dealt the most damage this run.
+ *
+ * Only considers platforms still on the board - a sold one takes its record
+ * with it. That is the honest answer to "which of your platforms earned its
+ * place", which is the question the end-of-run summary is asking.
+ *
+ * Support platforms deal no damage and so can never win this, which is correct:
+ * the stat is explicitly about damage dealt, and the panel labels it as such.
+ *
+ * @returns {object|null} The platform, or null if none dealt any damage
+ */
+export function getBestPlatform() {
+    let best = null;
+
+    for (const platform of platforms) {
+        if (!platform.alive || !(platform.damageDealt > 0)) continue;
+        if (!best || platform.damageDealt > best.damageDealt) best = platform;
+    }
+
+    return best;
 }

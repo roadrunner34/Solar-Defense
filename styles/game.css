@@ -765,6 +765,49 @@ body {
     outline-offset: 2px;
 }
 
+/* ==================== END-OF-RUN SUMMARY ==================== */
+
+/* The defeat screen used to show one number and nothing else. This is the
+   breakdown beneath it - narrow enough to scan in a column, and using the same
+   label-left / value-right shape as the wave summary so the two read as the
+   same kind of object. */
+
+.run-stats {
+    width: min(360px, 100%);
+    margin: var(--gap-3) 0 var(--gap-2);
+    padding: var(--gap-3) var(--gap-4);
+    text-align: left;
+    background: var(--surface-1);
+    border: 1px solid var(--accent-line);
+    border-radius: var(--radius);
+}
+
+.run-stats:empty {
+    display: none;
+}
+
+.run-stat {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: var(--gap-4);
+    padding: 3px 0;
+    font-size: 13px;
+}
+
+.run-stat span:first-child {
+    color: var(--text-faint);
+    white-space: nowrap;
+}
+
+.run-stat span:last-child {
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
 /* ==================== SETTINGS SCREEN ==================== */
 
 /* Settings is the one screen that is a form rather than a statement, so it

@@ -59,9 +59,11 @@ export function initUI() {
     elements.resumeButton = document.getElementById('resume-button');
     elements.restartPause = document.getElementById('restart-pause');
     
-    // Final score displays
+    // Final score displays, and the run breakdown beneath them
     elements.finalScoreVictory = document.getElementById('final-score-victory');
     elements.finalScoreDefeat = document.getElementById('final-score-defeat');
+    elements.runStatsVictory = document.getElementById('run-stats-victory');
+    elements.runStatsDefeat = document.getElementById('run-stats-defeat');
     
     // Build menu
     elements.buildMenu = document.getElementById('build-menu');
@@ -140,6 +142,99 @@ function wireButtonClickSound() {
 
         if (button && !button.disabled) playSound('uiClick');
     });
+}
+
+// ==================== END-OF-RUN SUMMARY ====================
+
+/**
+ * Fill in the run breakdown on the victory and defeat screens.
+ *
+ * The defeat screen used to show exactly one number - the final score - and was
+ * otherwise a dead end. A player who has just lost on wave 9 wants to know
+ * something about how, and every figure needed for that was already being
+ * tracked and thrown away.
+ *
+ * Both screens are populated rather than just the visible one. Only one is
+ * shown at a time, and deciding which here would mean this function knowing how
+ * the run ended, which is main.js's business.
+ *
+ * @param {object} summary - See buildRunStatRows() for the shape
+ */
+export function showRunSummary(summary) {
+    for (const container of [elements.runStatsVictory, elements.runStatsDefeat]) {
+        if (!container) continue;
+
+        container.innerHTML = '';
+
+        for (const row of buildRunStatRows(summary)) {
+            const line = document.createElement('div');
+            line.className = 'run-stat';
+
+            const label = document.createElement('span');
+            label.textContent = row.label;
+
+            const value = document.createElement('span');
+            value.textContent = row.value;
+
+            line.append(label, value);
+            container.appendChild(line);
+        }
+    }
+}
+
+/**
+ * Turn a run summary into label/value rows.
+ *
+ * Rows with nothing to say are dropped rather than shown as zero - a player who
+ * never built a platform does not need to be told their best platform dealt no
+ * damage.
+ *
+ * @param {object} summary
+ * @returns {Array<{label: string, value: string}>}
+ */
+function buildRunStatRows(summary) {
+    const rows = [
+        { label: 'Waves survived', value: String(summary.wavesSurvived ?? 0) },
+        { label: 'Enemies destroyed', value: formatNumber(summary.totalKills ?? 0) }
+    ];
+
+    // Kill breakdown, in the order the enemy types are configured so it reads
+    // consistently rather than in whatever order the player happened to meet them
+    const byType = summary.killsByType || {};
+    const breakdown = Object.keys(CONFIG.enemies)
+        .filter(type => byType[type] > 0)
+        .map(type => `${byType[type]} ${type}`);
+
+    if (breakdown.length > 0) {
+        rows.push({ label: 'Breakdown', value: breakdown.join(' · ') });
+    }
+
+    rows.push({ label: 'Accuracy', value: `${summary.accuracy ?? 0}%` });
+
+    if (summary.bestCombo > 1) {
+        rows.push({
+            label: 'Best chain',
+            value: `x${Number(summary.bestCombo.toFixed(2))}`
+        });
+    }
+
+    rows.push(
+        { label: 'Credits earned', value: formatNumber(summary.creditsEarned ?? 0) },
+        { label: 'Credits spent', value: formatNumber(summary.creditsSpent ?? 0) }
+    );
+
+    if (summary.platformsBuilt > 0) {
+        rows.push({ label: 'Platforms built', value: String(summary.platformsBuilt) });
+    }
+
+    if (summary.bestPlatform) {
+        rows.push({
+            label: 'Top platform',
+            value: `${summary.bestPlatform.name} · ${formatNumber(summary.bestPlatform.damage)} dmg`
+        });
+    }
+
+    return rows;
 }
 
 // ==================== KILL CHAIN ====================

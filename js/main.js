@@ -34,16 +34,17 @@ import { createStarbase, updateStarbase, resetStarbaseStats } from './starbase.j
 import { createProjectile, updateProjectiles, clearProjectiles, createHitEffect } from './projectile.js';
 import { initParticles, updateParticles, createEnemyDeathEffect, createMuzzleSparks } from './particles.js';
 import { updateEffects, clearEffects } from './effects.js';
-import { updatePlatforms, clearAllPlatforms, placementState, platforms } from './platform.js';
+import { updatePlatforms, clearAllPlatforms, placementState, platforms,
+         getPlatformsBuilt, getBestPlatform } from './platform.js';
 import { initEconomy, recordKill, recordShot, recordHit, awardWaveBonus,
          resetWaveTracking, getWaveSummary, getCredits, getScore,
-         saveProgress, loadBestRun, updateCombo } from './economy.js';
+         saveProgress, loadBestRun, updateCombo, getGameStats } from './economy.js';
 import { initUI, setupUICallbacks, updateHUD, showScreen, hideAllScreens,
          setHUDVisible, showDamageNumber, showFloatingText, showWaveAnnouncement,
          showWaveSummary, worldToScreen, initBuildMenu, initIntegrityPips,
          updateIntegrity, showBestRecord, showTooltip, setSettingsCallbacks,
          getSettingsReturnScreen, isSettingsOpen,
-         showBossBar, updateBossBar, hideBossBar } from './ui.js';
+         showBossBar, updateBossBar, hideBossBar, showRunSummary } from './ui.js';
 import { initAudio, playSound, panFromScreenX, resetSoundCooldowns } from './audio.js';
 import { startMusic, stopMusic, setMusicWave, setMusicIntensity } from './music.js';
 import { CONFIG, getWaveConfig, isBossWave, getBossHealthScale,
@@ -431,6 +432,41 @@ function handleDefeat() {
 function recordRun() {
     saveProgress({ wave: currentWave, score: getScore() });
     showSavedRecord();
+    showRunSummary(buildRunSummary());
+}
+
+/**
+ * Gather everything the end-of-run screens report.
+ *
+ * Composed here rather than inside economy.js because half of it is not the
+ * economy's business - how deep the run got is main.js's, and which platform
+ * did the most work is platform.js's. getGameStats() supplies the rest.
+ *
+ * @returns {object} Summary for showRunSummary()
+ */
+function buildRunSummary() {
+    const stats = getGameStats();
+    const best = getBestPlatform();
+
+    return {
+        ...stats,
+
+        // The wave reached, not the wave cleared. A run that died partway
+        // through wave 9 survived 8 - claiming 9 would be generous in a way
+        // that makes the number useless for comparing runs.
+        wavesSurvived: Math.max(0, currentWave - 1),
+
+        platformsBuilt: getPlatformsBuilt(),
+
+        bestPlatform: best
+            ? {
+                name: best.type
+                    .replace(/([A-Z])/g, ' $1')
+                    .replace(/^./, character => character.toUpperCase()),
+                damage: Math.round(best.damageDealt)
+              }
+            : null
+    };
 }
 
 /**
