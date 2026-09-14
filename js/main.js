@@ -43,6 +43,7 @@ import { initUI, setupUICallbacks, updateHUD, showScreen, hideAllScreens,
          showWaveSummary, worldToScreen, initBuildMenu, initIntegrityPips,
          updateIntegrity, showBestRecord, showTooltip } from './ui.js';
 import { initAudio, playSound, panFromScreenX, resetSoundCooldowns } from './audio.js';
+import { startMusic, stopMusic, setMusicWave, setMusicIntensity } from './music.js';
 import { CONFIG, getWaveConfig } from './config.js';
 
 // ==================== GAME STATE ====================
@@ -261,6 +262,10 @@ function startGame() {
     // be swallowed by the cooldown of the last shot of the previous one.
     resetSoundCooldowns();
 
+    // startMusic() is idempotent, so a restart rebalances the existing drone
+    // rather than stacking a second set of oscillators on the first
+    startMusic();
+
     currentState = GameState.PLAYING;
     currentWave = 1;
     endlessMode = false;
@@ -368,6 +373,13 @@ function handleVictory() {
     clearSelection();
     setHUDVisible(false);
     recordRun();
+
+    // Drop the drone back to its root rather than stopping it. The campaign is
+    // won but the player may still choose to hold the line, and cutting the
+    // music dead would make that choice feel like starting a new session.
+    setMusicIntensity(0);
+    playSound('victory');
+
     showScreen('victory');
 }
 
@@ -379,6 +391,11 @@ function handleDefeat() {
     clearSelection();
     setHUDVisible(false);
     recordRun();
+
+    // The run is over, so the drone goes with it
+    stopMusic(3);
+    playSound('defeat');
+
     showScreen('defeat');
 }
 
@@ -439,6 +456,9 @@ function startWave(waveNumber) {
     // Show wave announcement
     showWaveAnnouncement(waveNumber);
     playSound('waveStart');
+
+    // The drone thickens as the waves get worse
+    setMusicWave(waveNumber);
 }
 
 /**
@@ -484,6 +504,8 @@ function nextWave() {
 function continueEndless() {
     endlessMode = true;
     currentState = GameState.PLAYING;
+
+    startMusic();
 
     hideAllScreens();
     setHUDVisible(true);

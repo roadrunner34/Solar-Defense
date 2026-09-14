@@ -293,6 +293,65 @@ export const CONFIG = {
         // they sum into clipping, and a late endless wave becomes a wall.
         maxVoices: 16,
 
+        // ---------- MUSIC ----------
+        // The score is a drone, not a tune. A tower defence is played in long
+        // stretches of watching, and anything with a melody becomes maddening
+        // by the fourth loop - so this is a stack of sustained voices that fade
+        // in and out with how dangerous things are, and never resolves.
+        //
+        // Voices are pitched as an A minor drone: A1 root, E2 fifth, A2 octave,
+        // C3 minor third, E3. They enter in that order, so the harmony thickens
+        // and sours as the waves get worse without anything ever changing key.
+        music: {
+            // Seconds to crossfade a voice in or out. Long, because the player
+            // should notice the music has got heavier without catching it
+            // happening - a fast fade reads as a level-up jingle.
+            fadeSeconds: 5,
+
+            // The wave at which intensity reaches 1 and every voice is present.
+            // Past this the music stops escalating; the enemy counts do not,
+            // which is its own kind of dread.
+            peakWave: 12,
+
+            // A voice's `threshold` is the intensity by which it is fully
+            // present; it fades in across this band immediately below that.
+            // Without the band a voice would snap on the instant intensity
+            // crossed a number, which is audible as a click.
+            fadeBand: 0.18,
+
+            // Levels are tiny compared to the sound effects because these run
+            // continuously and sum with each other, whereas a laser is 120ms.
+            voices: [
+                // Root, doubled and detuned a fraction of a hertz. The two drift
+                // in and out of phase with each other over several seconds,
+                // which is what stops a held sine from sounding like a test tone.
+                { wave: 'sine', freq: 55, gain: 0.13, threshold: 0,
+                  filter: { type: 'lowpass', freq: 320, q: 0.8 } },
+                { wave: 'sine', freq: 55.22, gain: 0.11, threshold: 0,
+                  filter: { type: 'lowpass', freq: 320, q: 0.8 } },
+
+                // Fifth - arrives almost immediately, fills out the root
+                { wave: 'triangle', freq: 82.41, gain: 0.055, threshold: 0.12,
+                  filter: { type: 'lowpass', freq: 600, q: 0.9 } },
+
+                // Octave, pulsing. The LFO on its gain gives the drone a slow
+                // heartbeat once things are getting busy.
+                { wave: 'sine', freq: 110, gain: 0.05, threshold: 0.35,
+                  pulse: { rate: 0.42, depth: 0.75 },
+                  filter: { type: 'lowpass', freq: 900, q: 1 } },
+
+                // Minor third - the voice that makes the whole stack read as
+                // ominous rather than merely low
+                { wave: 'triangle', freq: 130.81, gain: 0.035, threshold: 0.58,
+                  filter: { type: 'lowpass', freq: 1400, q: 1 } },
+
+                // High fifth, faintly. Tension at the top of the mix.
+                { wave: 'sine', freq: 164.81, gain: 0.022, threshold: 0.8,
+                  pulse: { rate: 0.9, depth: 0.5 },
+                  filter: { type: 'lowpass', freq: 2200, q: 1 } }
+            ]
+        },
+
         // Sounds are quieter than you would expect in isolation, because a
         // dozen of them overlap constantly. These are tuned for the busy case.
         sounds: {
@@ -435,6 +494,54 @@ export const CONFIG = {
                         source: 'tone', wave: 'square',
                         freq: [900, 880], duration: 0.035,
                         gain: 0.08, attack: 0.002
+                    }
+                ]
+            },
+
+            // End of run. Both are priority, and both are deliberately built
+            // from the same three notes - the campaign resolving upward into a
+            // major triad, or collapsing downward. Using one shape for both is
+            // what makes them read as two outcomes of the same story.
+            victory: {
+                cooldown: 1,
+                priority: true,
+                layers: [
+                    {
+                        source: 'tone', wave: 'triangle',
+                        freq: [440, 440], duration: 0.5,
+                        gain: 0.2, attack: 0.015
+                    },
+                    {
+                        source: 'tone', wave: 'triangle',
+                        freq: [554.37, 554.37], duration: 0.5,
+                        gain: 0.18, attack: 0.015, delay: 0.16
+                    },
+                    {
+                        source: 'tone', wave: 'triangle',
+                        freq: [659.25, 659.25], duration: 1.1,
+                        gain: 0.18, attack: 0.015, delay: 0.32
+                    }
+                ]
+            },
+
+            defeat: {
+                cooldown: 1,
+                priority: true,
+                layers: [
+                    {
+                        source: 'tone', wave: 'triangle',
+                        freq: [330, 330], duration: 0.6,
+                        gain: 0.2, attack: 0.02
+                    },
+                    {
+                        source: 'tone', wave: 'triangle',
+                        freq: [261.63, 261.63], duration: 0.7,
+                        gain: 0.19, attack: 0.02, delay: 0.2
+                    },
+                    {
+                        source: 'tone', wave: 'sine',
+                        freq: [110, 55], duration: 1.8,
+                        gain: 0.26, attack: 0.03, delay: 0.4
                     }
                 ]
             },

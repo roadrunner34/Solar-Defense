@@ -22,115 +22,7 @@ import {
 
 import { CONFIG } from '../js/config.js';
 import { setSetting, resetSettings, reloadSettings, getSetting } from '../js/settings.js';
-
-// ==================== FAKE WEB AUDIO ====================
-
-/**
- * A minimal AudioParam that remembers the last value set on it.
- */
-function fakeParam(initial = 0) {
-    return {
-        value: initial,
-        setValueAtTime: vi.fn(),
-        exponentialRampToValueAtTime: vi.fn(),
-        linearRampToValueAtTime: vi.fn(),
-        cancelScheduledValues: vi.fn()
-    };
-}
-
-function fakeNode(extra = {}) {
-    return {
-        connect: vi.fn(function () {}),
-        disconnect: vi.fn(function () {}),
-        ...extra
-    };
-}
-
-/**
- * Build a fake AudioContext.
- *
- * currentTime is a plain writable property so a test can advance the clock and
- * step past a retrigger cooldown without waiting in real time.
- *
- * Every mock is written as `function () {}` rather than an arrow. Vitest warns
- * about arrow implementations, and more importantly an arrow function cannot be
- * called with `new` - which is exactly how audio.js constructs the context.
- */
-function createFakeContext() {
-    const context = {
-        state: 'running',
-        sampleRate: 48000,
-        currentTime: 0,
-        destination: fakeNode(),
-
-        createGain: vi.fn(function () {
-            return fakeNode({ gain: fakeParam(1) });
-        }),
-
-        createOscillator: vi.fn(function () {
-            return fakeNode({
-                type: 'sine',
-                frequency: fakeParam(440),
-                start: vi.fn(function () {}),
-                stop: vi.fn(function () {})
-            });
-        }),
-
-        createBufferSource: vi.fn(function () {
-            return fakeNode({
-                buffer: null,
-                loop: false,
-                loopStart: 0,
-                loopEnd: 0,
-                start: vi.fn(function () {}),
-                stop: vi.fn(function () {})
-            });
-        }),
-
-        createBiquadFilter: vi.fn(function () {
-            return fakeNode({
-                type: 'lowpass',
-                Q: fakeParam(1),
-                frequency: fakeParam(1000)
-            });
-        }),
-
-        createStereoPanner: vi.fn(function () {
-            return fakeNode({ pan: fakeParam(0) });
-        }),
-
-        createBuffer: vi.fn(function (channels, length) {
-            return {
-                length,
-                getChannelData: () => new Float32Array(length)
-            };
-        }),
-
-        resume: vi.fn(function () {
-            return Promise.resolve();
-        }),
-
-        close: vi.fn(function () {
-            return Promise.resolve();
-        })
-    };
-
-    return context;
-}
-
-/**
- * Install a fake context constructor.
- *
- * A plain function rather than an arrow: `new` on an arrow throws, and
- * returning an object from a constructor call is what hands audio.js the fake.
- *
- * @param {object} context - The fake context to hand out
- */
-function installContext(context) {
-    globalThis.AudioContext = vi.fn(function () {
-        return context;
-    });
-}
+import { createFakeContext, installContext, uninstallContext } from './helpers/fakeAudioContext.js';
 
 /**
  * Install a fake context and initialize audio against it.
@@ -147,8 +39,7 @@ function withFakeAudio() {
 
 afterEach(() => {
     disposeAudio();
-    delete globalThis.AudioContext;
-    delete globalThis.webkitAudioContext;
+    uninstallContext();
     vi.useRealTimers();
 });
 
@@ -157,8 +48,7 @@ afterEach(() => {
 describe('without an AudioContext', () => {
     beforeEach(() => {
         disposeAudio();
-        delete globalThis.AudioContext;
-        delete globalThis.webkitAudioContext;
+        uninstallContext();
     });
 
     it('reports that audio is not ready', () => {

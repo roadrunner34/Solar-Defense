@@ -13,19 +13,24 @@ npm run test:watch   # re-run on change
 
 ```
 tests/
+├── audio.test.js            # synth recipes, voice cap, cooldowns, panning
 ├── config.test.js           # CONFIG contents, helpers, endless wave ramp
 ├── economy.test.js          # credits, score, accuracy, best-run persistence
 ├── effects.test.js          # the step-driven effect scheduler
 ├── enemy.test.js            # spawning, movement, damage, health bars
 ├── mathUtils.test.js        # damping, easing, clamping
+├── music.test.js            # the drone's intensity curve and voice thresholds
 ├── particles.test.js        # pool recycling
 ├── path.test.js             # enemy path geometry and travel speed
 ├── platform.test.js         # creation, placement rules, overlap
 ├── platform-combat.test.js  # targeting, firing, economy, selling
 ├── projectile.test.js       # laser vs missile, homing, splash damage
+├── settings.test.js         # validation, persistence, change notifications
 ├── textures.test.js         # procedural noise and the headless fallback
 ├── ui.test.js               # HUD and build menu
-└── upgrade.test.js          # tiers, costs, investment
+├── upgrade.test.js          # tiers, costs, investment
+└── helpers/
+    └── fakeAudioContext.js  # shared Web Audio stand-in (not a spec)
 ```
 
 ## Environment
@@ -38,11 +43,20 @@ guards that fallback specifically, since four other files rely on it to be able
 to build a scene at all.
 
 A file that genuinely needs a DOM (anything touching `document`, such as the
-enemy health bars) opts in with a docblock on its first line:
+enemy health bars, or `localStorage`, such as the settings store) opts in with
+a docblock on its first line:
 
 ```js
 // @vitest-environment jsdom
 ```
+
+There is no Web Audio API in either environment. `audio.js` is written to
+degrade silently when there is no `AudioContext` — `audio.test.js` guards that
+specifically, since every other spec imports a module chain that reaches it.
+Tests that need a working audio graph install the stand-in from
+`helpers/fakeAudioContext.js`, which records what it was asked to build and
+produces no sound. Its mocks are written as `function () {}` rather than arrows
+because an arrow cannot be called with `new`.
 
 ## Conventions
 
