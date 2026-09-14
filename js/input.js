@@ -13,6 +13,7 @@
 
 import * as THREE from 'three';
 import { camera } from './camera.js';
+import { showFloatingText } from './ui.js';
 import { 
     placementState, 
     updatePlacementPreview, 
@@ -52,8 +53,25 @@ export const inputState = {
     // Click tracking for one-shot detection
     // (We need to know when a click JUST happened, not just if button is held)
     leftClickJustPressed: false,
-    rightClickJustPressed: false
+    rightClickJustPressed: false,
+
+    // A completed click - pressed and released without the pointer wandering.
+    //
+    // Needed because left-drag is also how the camera orbits. Selecting on
+    // mousedown would mean every attempt to look around also selected whatever
+    // happened to be under the cursor when the drag began. The distinction is
+    // movement: a click stays put, a drag does not.
+    leftClickCompleted: false
 };
+
+// Where the left button went down, and whether the pointer has since moved far
+// enough to call it a drag rather than a click
+const clickOrigin = { x: 0, y: 0 };
+let clickIsCandidate = false;
+
+// Pixels of travel allowed before a press stops counting as a click. Generous
+// enough to survive a shaky hand or a trackpad.
+const CLICK_DRAG_THRESHOLD = 6;
 
 // Raycaster for mouse picking (clicking on 3D objects)
 const raycaster = new THREE.Raycaster();
@@ -83,6 +101,17 @@ export function initInput() {
  * Converts screen position to normalized coordinates and calculates aim direction
  */
 function onMouseMove(event) {
+    // Far enough from where the button went down? This is a camera drag, not a
+    // click, and must not select anything on release.
+    if (clickIsCandidate) {
+        const travelled = Math.hypot(
+            event.clientX - clickOrigin.x,
+            event.clientY - clickOrigin.y
+        );
+
+        if (travelled > CLICK_DRAG_THRESHOLD) clickIsCandidate = false;
+    }
+
     // Store raw screen position
     inputState.mouseX = event.clientX;
     inputState.mouseY = event.clientY;
@@ -109,6 +138,10 @@ function onMouseDown(event) {
     if (event.button === 0) {
         inputState.mouseDown = true;
         inputState.leftClickJustPressed = true;
+
+        clickOrigin.x = event.clientX;
+        clickOrigin.y = event.clientY;
+        clickIsCandidate = true;
         
         // If in placement mode, try to place the platform
         if (placementState.active) {
@@ -131,6 +164,10 @@ function onMouseDown(event) {
 function onMouseUp(event) {
     if (event.button === 0) {
         inputState.mouseDown = false;
+
+        // Released without having wandered: a real click, not a camera drag
+        if (clickIsCandidate) inputState.leftClickCompleted = true;
+        clickIsCandidate = false;
     } else if (event.button === 2) {
         inputState.rightMouseDown = false;
     }
@@ -270,12 +307,23 @@ export function getMouseWorldPosition(cam, planeHeight = 0) {
 }
 
 /**
- * Check if a key was just pressed (for one-time actions)
- * Note: For this to work properly, you'd need to track previous state
- * For now, returns current state - can be enhanced later
+ * Check whether a key is currently held.
+ *
+ * Renamed from isKeyJustPressed(), which was never true to its name: it
+ * returned the held state, not an edge, and its own docblock admitted as much
+ * while leaving the misleading name in the public API. Nothing called it, so
+ * nothing was broken by the lie - but a caller reaching for "just pressed" and
+ * getting "still held" would have had a genuinely confusing bug.
+ *
+ * Edge detection for one-shot actions is done the way the mouse does it: a
+ * flag raised by the event handler and cleared by clearInputFlags() at the end
+ * of the frame. See inputState.leftClickCompleted.
+ *
+ * @param {string} key - A key name from inputState.keys
+ * @returns {boolean}
  */
-export function isKeyJustPressed(key) {
-    return inputState.keys[key];
+export function isKeyHeld(key) {
+    return Boolean(inputState.keys[key]);
 }
 
 /**
@@ -318,11 +366,14 @@ function handlePlacementClick() {
     const platform = confirmPlacement();
     
     if (platform) {
-        console.log(`Platform placed successfully: ${platform.type}`);
         // Platform was placed - preview is automatically removed
-    } else {
-        console.log('Placement failed - invalid position');
-        // Placement failed - preview stays so player can try again
+        return;
+    }
+    
+    // Placement failed - the preview stays so the player can try again, and we
+    // say why at the cursor rather than only in the console
+    if (placementState.lastError) {
+        showFloatingText(placementState.lastError, inputState.mouseX, inputState.mouseY, '#ff6666');
     }
 }
 
@@ -340,7 +391,6 @@ export function enterPlacementMode(platformType) {
     // Update preview position immediately based on current mouse position
     updatePlacementPreviewPosition();
     
-    console.log(`Entered placement mode for: ${platformType}`);
 }
 
 /**
@@ -350,7 +400,6 @@ export function enterPlacementMode(platformType) {
  */
 export function exitPlacementMode() {
     cancelPlacement();
-    console.log('Exited placement mode');
 }
 
 /**
@@ -362,6 +411,7 @@ export function exitPlacementMode() {
 export function clearInputFlags() {
     inputState.leftClickJustPressed = false;
     inputState.rightClickJustPressed = false;
+    inputState.leftClickCompleted = false;
 }
 
 /**

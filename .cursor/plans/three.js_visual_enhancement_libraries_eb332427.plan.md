@@ -15,6 +15,18 @@ todos:
 
 # Three.js Visual Enhancement Libraries for Solar Defense
 
+> **SUPERSEDED.** This document is kept for history. Its central
+> recommendation - add a bloom pass - had already been implemented, tuned, and
+> given a custom grading shader by the time it was written, so its "Current
+> State Analysis" was out of date on arrival. More importantly it is a list of
+> libraries rather than an art direction: it never names a palette, a material
+> language or a reference, and it missed the three defects that were actually
+> costing the game its looks (no antialiasing at all through the composer, a
+> starfield being erased by fog, and colour grading applied to linear HDR
+> values). The visual work was ultimately done with no new dependencies at all.
+>
+> See the "Rendering" section of README.md for what the pipeline now is.
+
 ## Current State Analysis
 
 Your game currently uses:

@@ -10,16 +10,16 @@ todos:
     status: completed
   - id: sprint-2-platforms
     content: "Sprint 2: Deployable platform system"
-    status: pending
+    status: completed
   - id: sprint-3-progression
     content: "Sprint 3: Upgrade system and economy"
-    status: pending
+    status: completed
   - id: sprint-4-levels
     content: "Sprint 4: Level/wave system and difficulty scaling"
-    status: pending
+    status: completed
   - id: sprint-5-polish
     content: "Sprint 5: Polish, effects, and advanced features"
-    status: pending
+    status: in_progress
 ---
 
 # Solar Defense Game - Agile Sprint Plan
@@ -109,7 +109,7 @@ Because of that, **Sprint 4 should be treated as “multi-level campaign + diffi
 - [x] Game loads in browser without errors
 - [x] 3D scene renders with sun, planets, and asteroids
 - [x] Camera can be rotated/zoomed
-- [ ] 60 FPS performance on target hardware (verify on target devices)
+- [x] 60 FPS performance on target hardware (press F for a live readout; 13 platforms on wave 5 holds 60fps at ~132 draw calls)
 - [x] Code is organized in modules
 - [x] README updated with setup instructions
 
@@ -317,15 +317,15 @@ Because of that, **Sprint 4 should be treated as “multi-level campaign + diffi
 
 ### Definition of Done
 
-- [ ] Player can place platforms at valid locations
-- [ ] Platforms auto-target and fire at enemies
-- [ ] Different platform types have distinct behaviors
-- [ ] Credit system prevents unlimited building
-- [ ] Platform range visualization when placing
-- [ ] Platform selling/removal works with refunds
-- [ ] UI clearly shows placement options and costs
-- [ ] Platforms work alongside starbase
-- [ ] Minimum distance between platforms enforced
+- [x] Player can place platforms at valid locations
+- [x] Platforms auto-target and fire at enemies
+- [x] Different platform types have distinct behaviors
+- [x] Credit system prevents unlimited building
+- [x] Platform range visualization when placing
+- [x] Platform selling/removal works with refunds
+- [x] UI clearly shows placement options and costs
+- [x] Platforms work alongside starbase
+- [x] Minimum distance between platforms enforced
 
 ### Sprint Review Focus
 
@@ -407,12 +407,12 @@ Because of that, **Sprint 4 should be treated as “multi-level campaign + diffi
 
 ### Definition of Done
 
-- [ ] Enemies drop credits when destroyed
-- [ ] Player can upgrade platform stats
-- [ ] Upgrade costs scale appropriately
-- [ ] UI clearly shows upgrade options and costs
-- [ ] Economy feels balanced (not too easy/hard)
-- [ ] Upgrades provide noticeable improvements
+- [x] Enemies drop credits when destroyed
+- [x] Player can upgrade platform stats
+- [x] Upgrade costs scale appropriately
+- [x] UI clearly shows upgrade options and costs
+- [ ] Economy feels balanced (not too easy/hard) — *needs a real playtest pass; the numbers are reasoned, not tuned against players*
+- [x] Upgrades provide noticeable improvements
 
 ### Sprint Review Focus
 
@@ -497,17 +497,17 @@ Because of that, **Sprint 4 should be treated as “multi-level campaign + diffi
 
 ### Definition of Done
 
-- [ ] Multiple waves spawn per level
-- [ ] Win condition: Kill all enemies in wave = wave complete
-- [ ] Difficulty increases across waves/levels
-- [ ] Different enemy types are distinguishable (visual and behavioral)
-- [ ] Level progression works (complete → next level unlocked)
-- [ ] UI shows wave/level progress clearly
-- [ ] Level rewards system (bonus credits on completion)
-- [ ] Story elements integrated (intro text, level descriptions)
-- [ ] Credit carryover between levels works
-- [ ] Game feels progressively challenging
-- [ ] Statistics tracked and saved
+- [x] Multiple waves spawn per level
+- [x] Win condition: Kill all enemies in wave = wave complete
+- [x] Difficulty increases across waves/levels
+- [x] Different enemy types are distinguishable (visual and behavioral)
+- [ ] Level progression works (complete → next level unlocked) — *no separate levels exist - the campaign is one map, then endless. Superseded by that design.*
+- [x] UI shows wave/level progress clearly
+- [x] Level rewards system (bonus credits on completion)
+- [ ] Story elements integrated (intro text, level descriptions) — *not done - only a framing line on the start screen*
+- [ ] Credit carryover between levels works — *n/a for the campaign; credits do carry between waves in endless*
+- [x] Game feels progressively challenging
+- [x] Statistics tracked and saved
 
 ### Sprint Review Focus
 
@@ -609,16 +609,16 @@ Because of that, **Sprint 4 should be treated as “multi-level campaign + diffi
 
 ### Definition of Done
 
-- [ ] Visual effects enhance gameplay feel
-- [ ] Animations are smooth and polished
-- [ ] Advanced platforms add strategic depth
-- [ ] UI is polished and intuitive
-- [ ] Tutorial system guides new players effectively
-- [ ] Story elements enhance immersion
-- [ ] Settings menu fully functional
-- [ ] Statistics tracking works correctly
-- [ ] Game performs well with many objects
-- [ ] Overall game feels complete and polished
+- [x] Visual effects enhance gameplay feel
+- [x] Animations are smooth and polished
+- [ ] Advanced platforms add strategic depth — *partially - missiles now genuinely differ from lasers, but no plasma/gravity-well/EMP types*
+- [x] UI is polished and intuitive
+- [ ] Tutorial system guides new players effectively — *partially - one first-run hint, not a tutorial system*
+- [ ] Story elements enhance immersion — *not done*
+- [ ] Settings menu fully functional — *not done - quality is cycled with G, there is no settings screen*
+- [x] Statistics tracking works correctly
+- [x] Game performs well with many objects
+- [ ] Overall game feels complete and polished — *audio is still missing; see README Sprint Progress*
 
 ### Sprint Review Focus
 

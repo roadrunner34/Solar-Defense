@@ -66,7 +66,6 @@ export function initParticles() {
     );
     scene.add(trailParticleSystem.points);
     
-    console.log('Particle systems initialized');
 }
 
 /**
@@ -90,11 +89,19 @@ function createParticleSystem(maxParticles, color, baseSize) {
     // Alpha/opacity array for fading
     const alphas = new Float32Array(maxParticles);
     
+    // Per-particle colour. This lives on the geometry rather than in a material
+    // uniform so that two bursts happening at once keep their own colours,
+    // instead of the second one recolouring every particle already in flight.
+    const colors = new Float32Array(maxParticles * 3);
+    
     // Initialize all particles at origin with zero size (invisible)
     for (let i = 0; i < maxParticles; i++) {
         positions[i * 3] = 0;
         positions[i * 3 + 1] = 0;
         positions[i * 3 + 2] = 0;
+        colors[i * 3] = color.r;
+        colors[i * 3 + 1] = color.g;
+        colors[i * 3 + 2] = color.b;
         sizes[i] = 0;
         alphas[i] = 0;
     }
@@ -102,21 +109,26 @@ function createParticleSystem(maxParticles, color, baseSize) {
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
     geometry.setAttribute('alpha', new THREE.BufferAttribute(alphas, 1));
+    // Named particleColor rather than color: 'color' is a reserved attribute
+    // name that Three.js injects itself when vertexColors is enabled.
+    geometry.setAttribute('particleColor', new THREE.BufferAttribute(colors, 3));
     
     // Custom shader material for particles with per-particle size and alpha
     const material = new THREE.ShaderMaterial({
         uniforms: {
-            color: { value: color },
             baseSize: { value: baseSize }
         },
         vertexShader: `
             attribute float size;
             attribute float alpha;
+            attribute vec3 particleColor;
             varying float vAlpha;
+            varying vec3 vColor;
             uniform float baseSize;
             
             void main() {
                 vAlpha = alpha;
+                vColor = particleColor;
                 vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
                 // Size attenuates with distance (closer = bigger)
                 gl_PointSize = size * baseSize * (300.0 / -mvPosition.z);
@@ -124,8 +136,8 @@ function createParticleSystem(maxParticles, color, baseSize) {
             }
         `,
         fragmentShader: `
-            uniform vec3 color;
             varying float vAlpha;
+            varying vec3 vColor;
             
             void main() {
                 // Create circular particles with soft edges
@@ -137,7 +149,7 @@ function createParticleSystem(maxParticles, color, baseSize) {
                 
                 if (alpha < 0.01) discard; // Discard nearly invisible pixels
                 
-                gl_FragColor = vec4(color, alpha);
+                gl_FragColor = vec4(vColor, alpha);
             }
         `,
         transparent: true,
@@ -146,6 +158,12 @@ function createParticleSystem(maxParticles, color, baseSize) {
     });
     
     const points = new THREE.Points(geometry, material);
+    
+    // Three.js computes the bounding sphere once, from the all-zero initial
+    // position array, and never recomputes it - so it stays a zero-radius
+    // sphere at the origin however far particles actually travel. Without
+    // this, every burst is culled the moment the origin leaves the frustum.
+    points.frustumCulled = false;
     
     // Particle pool - tracks state of each particle
     const particles = [];
@@ -157,6 +175,7 @@ function createParticleSystem(maxParticles, color, baseSize) {
             maxLife: 1,
             velocity: new THREE.Vector3(),
             position: new THREE.Vector3(),
+            color: color.clone(),
             size: 1,
             startSize: 1,
             endSize: 0
@@ -167,9 +186,11 @@ function createParticleSystem(maxParticles, color, baseSize) {
         points,
         geometry,
         particles,
+        defaultColor: color.clone(),
         positions: geometry.attributes.position.array,
         sizes: geometry.attributes.size.array,
         alphas: geometry.attributes.alpha.array,
+        colors: geometry.attributes.particleColor.array,
         nextIndex: 0
     };
 }
@@ -209,13 +230,9 @@ function getParticle(system) {
 export function createExplosion(position, color = null, count = 30, speed = 8) {
     if (!explosionParticleSystem) return;
     
-    // Update material color if custom color provided
-    if (color) {
-        explosionParticleSystem.points.material.uniforms.color.value.copy(color);
-    } else {
-        // Default explosion color (bright orange)
-        explosionParticleSystem.points.material.uniforms.color.value.set(2, 1.5, 0.3);
-    }
+    // Each burst carries its colour on its own particles, so simultaneous
+    // explosions no longer overwrite one another.
+    const burstColor = color || explosionParticleSystem.defaultColor;
     
     for (let i = 0; i < count; i++) {
         const particle = getParticle(explosionParticleSystem);
@@ -223,6 +240,7 @@ export function createExplosion(position, color = null, count = 30, speed = 8) {
         // Initialize particle
         particle.active = true;
         particle.life = 0;
+        particle.color.copy(burstColor);
         particle.maxLife = 0.5 + Math.random() * 0.5; // 0.5-1 second lifetime
         
         // Position at explosion center
@@ -263,6 +281,7 @@ export function createSparks(position, direction = null, count = 10) {
         
         particle.active = true;
         particle.life = 0;
+        particle.color.copy(sparkParticleSystem.defaultColor);
         particle.maxLife = 0.2 + Math.random() * 0.3; // Short lived
         
         particle.position.copy(position);
@@ -292,25 +311,37 @@ export function createSparks(position, direction = null, count = 10) {
 }
 
 /**
- * Create a trail particle at a position
- * 
- * Used for projectile trails - creates particles that fade behind moving objects
- * 
- * @param {THREE.Vector3} position - Where to create trail particle
+ * Create a trail particle at a position.
+ *
+ * Drops a stationary, shrinking mote that a moving object leaves behind. The
+ * particle deliberately has zero velocity: a trail is the record of where
+ * something has been, so it should hang in place while the emitter moves on.
+ * Give it velocity and you get a cloud that chases the projectile instead.
+ *
+ * This function existed unused for the whole of Sprint 2 - projectiles had no
+ * trails at all. It now takes appearance arguments so a laser bolt and a
+ * missile can be told apart by their wake: a tight bright cyan streak versus
+ * a wide, slow, grey smoke column.
+ *
+ * @param {THREE.Vector3} position - Where to create the trail particle
+ * @param {THREE.Color} [color] - Defaults to the trail system's own colour
+ * @param {number} [size] - Starting size
+ * @param {number} [life] - Seconds before it disappears
  */
-export function createTrailParticle(position) {
+export function createTrailParticle(position, color = null, size = 0.5, life = 0.3) {
     if (!trailParticleSystem) return;
-    
+
     const particle = getParticle(trailParticleSystem);
-    
+
     particle.active = true;
     particle.life = 0;
-    particle.maxLife = 0.3; // Short trail life
-    
+    particle.color.copy(color || trailParticleSystem.defaultColor);
+    particle.maxLife = life;
+
     particle.position.copy(position);
-    particle.velocity.set(0, 0, 0); // Trails don't move
-    
-    particle.startSize = 0.5;
+    particle.velocity.set(0, 0, 0); // Trails mark where the emitter was
+
+    particle.startSize = size;
     particle.endSize = 0;
     particle.size = particle.startSize;
 }
@@ -376,6 +407,9 @@ function updateParticleSystem(system, deltaTime) {
         system.positions[idx * 3] = particle.position.x;
         system.positions[idx * 3 + 1] = particle.position.y;
         system.positions[idx * 3 + 2] = particle.position.z;
+        system.colors[idx * 3] = particle.color.r;
+        system.colors[idx * 3 + 1] = particle.color.g;
+        system.colors[idx * 3 + 2] = particle.color.b;
         system.sizes[idx] = particle.size;
         system.alphas[idx] = alpha;
         
@@ -387,6 +421,7 @@ function updateParticleSystem(system, deltaTime) {
         system.geometry.attributes.position.needsUpdate = true;
         system.geometry.attributes.size.needsUpdate = true;
         system.geometry.attributes.alpha.needsUpdate = true;
+        system.geometry.attributes.particleColor.needsUpdate = true;
     }
 }
 

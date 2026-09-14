@@ -23,8 +23,9 @@
  * - Easing: How the animation accelerates/decelerates (e.g., "power2.out")
  */
 
-import { getCredits, getScore, getAccuracy, getGameStats } from './economy.js';
+import { getCredits, getScore, getAccuracy, getGameStats, canAfford } from './economy.js';
 import { getEnemyCount } from './enemy.js';
+import { CONFIG } from './config.js';
 import gsap from 'gsap';
 
 // Cache DOM element references (faster than querying each frame)
@@ -58,6 +59,128 @@ export function initUI() {
     // Final score displays
     elements.finalScoreVictory = document.getElementById('final-score-victory');
     elements.finalScoreDefeat = document.getElementById('final-score-defeat');
+    
+    // Build menu
+    elements.buildMenu = document.getElementById('build-menu');
+
+    // Wave meter and integrity readout. These are absent from the test fixture,
+    // which renders only the handful of nodes the HUD strictly needs, so every
+    // read of them below is null-guarded.
+    elements.waveProgress = document.getElementById('wave-progress');
+    elements.enemiesPlural = document.getElementById('enemies-plural');
+    elements.integrityPips = document.getElementById('integrity-pips');
+
+    // Selection panel
+    elements.selectionPanel = document.getElementById('selection-panel');
+    elements.selectionName = document.getElementById('selection-name');
+    elements.selectionStats = document.getElementById('selection-stats');
+    elements.selectionUpgrades = document.getElementById('selection-upgrades');
+    elements.selectionSell = document.getElementById('selection-sell');
+    elements.selectionClose = document.getElementById('selection-close');
+
+    // Start screen record line, and the victory screen's endless option
+    elements.bestRecord = document.getElementById('best-record');
+    elements.continueEndless = document.getElementById('continue-endless');
+}
+
+/**
+ * Whether the player has asked their system to reduce motion.
+ *
+ * Checked at call time rather than cached, because the preference can change
+ * mid-session. Every GSAP sequence in this file consults it and falls back to a
+ * plain fade - the information still arrives, it just does not fly in.
+ *
+ * @returns {boolean}
+ */
+function prefersReducedMotion() {
+    return typeof window !== 'undefined' &&
+        typeof window.matchMedia === 'function' &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+// ==================== BUILD MENU ====================
+
+/**
+ * Turns a config key into a readable name: laserBattery -> Laser Battery.
+ *
+ * Derived rather than looked up in a table so a new platform type added to the
+ * config needs no corresponding UI change.
+ *
+ * @param {string} type - Platform type key
+ * @returns {string} Display name
+ */
+function formatPlatformName(type) {
+    return type
+        .replace(/([A-Z])/g, ' $1')
+        .replace(/^./, character => character.toUpperCase());
+}
+
+/**
+ * Returns the number key that selects a platform type.
+ *
+ * Hotkeys follow config order, so the nth platform type is on the nth number
+ * key. main.js resolves key presses the same way.
+ *
+ * @param {string} type - Platform type key
+ * @returns {string} The hotkey character
+ */
+export function getPlatformHotkey(type) {
+    return String(Object.keys(CONFIG.platforms).indexOf(type) + 1);
+}
+
+/**
+ * Build the platform build menu.
+ *
+ * Buttons are generated from CONFIG.platforms rather than written into the
+ * HTML, so the menu always reflects the configured platform types and their
+ * real stats.
+ *
+ * @param {Function} onSelect - Called with a platform type when one is chosen
+ */
+export function initBuildMenu(onSelect) {
+    if (!elements.buildMenu) return;
+    
+    elements.buildMenu.innerHTML = '<h3>Build</h3>';
+    
+    for (const [type, config] of Object.entries(CONFIG.platforms)) {
+        const button = document.createElement('button');
+        button.className = 'build-option';
+        button.dataset.type = type;
+        
+        button.innerHTML = `
+            <span class="build-option-name">${formatPlatformName(type)}</span>
+            <span class="build-option-key">${getPlatformHotkey(type)}</span>
+            <span class="build-option-cost">${config.cost} cr</span>
+            <span class="build-option-stats">${config.damage} dmg &middot; ${config.range} range</span>
+        `;
+        
+        button.addEventListener('click', () => onSelect(type));
+        elements.buildMenu.appendChild(button);
+    }
+    
+    updateBuildMenu();
+}
+
+/**
+ * Refresh the build menu against the current balance and selection.
+ *
+ * Called every frame from updateHUD, so buttons grey out the moment credits
+ * drop below a platform's cost.
+ *
+ * @param {string|null} selectedType - Platform type currently being placed
+ */
+export function updateBuildMenu(selectedType = null) {
+    if (!elements.buildMenu) return;
+    
+    for (const button of elements.buildMenu.querySelectorAll('.build-option')) {
+        const config = CONFIG.platforms[button.dataset.type];
+        if (!config) continue;
+        
+        const affordable = canAfford(config.cost);
+        button.classList.toggle('unaffordable', !affordable);
+        button.classList.toggle('selected', button.dataset.type === selectedType);
+        button.disabled = !affordable;
+    }
 }
 
 /**
@@ -97,6 +220,14 @@ export function setupUICallbacks(callbacks) {
             callbacks.onRestart && callbacks.onRestart();
         });
     }
+
+    // "Hold the Line" on the victory screen - carry on into generated waves
+    // rather than ending the session on a win
+    if (elements.continueEndless) {
+        elements.continueEndless.addEventListener('click', () => {
+            callbacks.onContinueEndless && callbacks.onContinueEndless();
+        });
+    }
 }
 
 /**
@@ -104,26 +235,102 @@ export function setupUICallbacks(callbacks) {
  * Call this every frame or when values change
  * @param {number} waveNumber - Current wave number
  */
-export function updateHUD(waveNumber) {
+export function updateHUD(waveNumber, selectedPlatformType = null, waveProgress = null) {
+    const remaining = getEnemyCount();
+
     // Update wave number
     if (elements.waveNumber) {
         elements.waveNumber.textContent = waveNumber;
     }
-    
+
     // Update enemy count
     if (elements.enemiesRemaining) {
-        elements.enemiesRemaining.textContent = getEnemyCount();
+        elements.enemiesRemaining.textContent = remaining;
     }
-    
+
+    // "1 hostile inbound", not "1 hostiles inbound"
+    if (elements.enemiesPlural) {
+        elements.enemiesPlural.textContent = remaining === 1 ? '' : 's';
+    }
+
+    // Wave progress bar. Caller passes {cleared, total}; the width transition
+    // is CSS's, so this only ever writes the target percentage.
+    if (elements.waveProgress && waveProgress && waveProgress.total > 0) {
+        const fraction = waveProgress.cleared / waveProgress.total;
+        elements.waveProgress.style.width = `${Math.min(100, fraction * 100)}%`;
+    }
+
     // Update score
     if (elements.score) {
         elements.score.textContent = formatNumber(getScore());
     }
-    
+
     // Update credits
     if (elements.credits) {
         elements.credits.textContent = formatNumber(getCredits());
     }
+
+    // Grey out platforms the player can no longer afford
+    updateBuildMenu(selectedPlatformType);
+}
+
+// ==================== INTEGRITY ====================
+
+/**
+ * Build the integrity pip row.
+ *
+ * Generated from the count rather than written into index.html, so changing
+ * CONFIG.planet.integrity changes the UI with it. Hard-coding three pips in the
+ * markup is exactly the kind of drift that leaves a HUD lying about the game.
+ *
+ * @param {number} max - How many pips the planet starts with
+ */
+export function initIntegrityPips(max) {
+    if (!elements.integrityPips) return;
+
+    elements.integrityPips.innerHTML = '';
+
+    for (let i = 0; i < max; i++) {
+        const pip = document.createElement('div');
+        pip.className = 'pip';
+        elements.integrityPips.appendChild(pip);
+    }
+
+    elements.integrityPips.classList.remove('critical');
+}
+
+/**
+ * Reflect the planet's remaining integrity.
+ *
+ * Spent pips are marked rather than removed, so the player can always see how
+ * much they started with - a row that shrinks tells you how much is left but
+ * not how much has gone.
+ *
+ * @param {number} current - Remaining integrity
+ */
+export function updateIntegrity(current) {
+    if (!elements.integrityPips) return;
+
+    const pips = [...elements.integrityPips.children];
+
+    pips.forEach((pip, index) => {
+        pip.classList.toggle('lost', index >= current);
+    });
+
+    // One hit from losing the planet. The class drives both a colour change and
+    // a pulse, so the warning survives being colour-blind.
+    elements.integrityPips.classList.toggle('critical', current === 1);
+}
+
+/**
+ * Show the saved best run on the start screen, if there is one.
+ * @param {string|null} text - Line to show, or null to hide the row
+ */
+export function showBestRecord(text) {
+    if (!elements.bestRecord) return;
+
+    elements.bestRecord.textContent = text || '';
+    elements.bestRecord.hidden = !text;
 }
 
 /**
@@ -471,194 +678,157 @@ export function showFloatingText(text, screenX, screenY, color = '#00ff00') {
 }
 
 /**
- * Show wave announcement with dramatic GSAP animation
- * 
- * Wave announcements should feel epic! This uses:
- * - Scale zoom from small to large
- * - Glow effect that pulses
- * - Smooth fade out
- * 
+ * Announce a wave.
+ *
+ * Appearance now comes from the .wave-banner rules in game.css rather than an
+ * inline cssText string. That split matters: restyling this used to mean
+ * editing a CSS string inside a JS template literal, invisible to anyone
+ * looking at the stylesheet.
+ *
+ * GSAP still owns the motion, because the overshoot-and-settle here is a
+ * sequence rather than a state change and CSS transitions cannot express it.
+ *
  * @param {number} waveNumber - Wave number to announce
+ * @param {string} [subtitle] - Optional line under the number
  */
-export function showWaveAnnouncement(waveNumber) {
-    // Create container for the announcement
-    const announcement = document.createElement('div');
-    announcement.style.cssText = `
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        font-size: 64px;
-        font-weight: bold;
-        color: #00ffff;
-        text-shadow: 0 0 20px rgba(0, 255, 255, 0.8);
-        z-index: 200;
-        pointer-events: none;
-        white-space: nowrap;
-    `;
-    announcement.textContent = `Wave ${waveNumber}`;
-    
-    document.body.appendChild(announcement);
-    
-    // Create epic GSAP animation timeline
-    const tl = gsap.timeline({
-        onComplete: () => announcement.remove() // Clean up when done
+export function showWaveAnnouncement(waveNumber, subtitle = '') {
+    const banner = document.createElement('div');
+    banner.className = 'wave-banner';
+
+    const heading = document.createElement('span');
+    heading.textContent = `Wave ${waveNumber}`;
+    banner.appendChild(heading);
+
+    if (subtitle) {
+        const sub = document.createElement('span');
+        sub.className = 'wave-banner-sub';
+        sub.textContent = subtitle;
+        banner.appendChild(sub);
+    }
+
+    document.body.appendChild(banner);
+
+    // The element is centred with left/top 50%, so every transform below has to
+    // carry the -50% offset or GSAP's own transform would undo the centring
+    const centre = { xPercent: -50, yPercent: -50 };
+
+    if (prefersReducedMotion()) {
+        gsap.set(banner, { ...centre, opacity: 1 });
+        gsap.to(banner, { opacity: 0, duration: 0.4, delay: 1.6,
+                          onComplete: () => banner.remove() });
+        return;
+    }
+
+    const tl = gsap.timeline({ onComplete: () => banner.remove() });
+
+    tl.set(banner, { ...centre, scale: 0.55, opacity: 0, rotation: -4 });
+
+    tl.to(banner, {
+        scale: 1.12, opacity: 1, rotation: 0,
+        duration: 0.45, ease: 'back.out(2)'
     });
-    
-    // Start small and transparent
-    tl.set(announcement, {
-        scale: 0.5,
-        opacity: 0,
-        rotation: -5
-    });
-    
-    // Zoom in with elastic bounce
-    tl.to(announcement, {
-        scale: 1.2, // Slightly overshoot
-        opacity: 1,
-        rotation: 0,
-        duration: 0.5,
-        ease: "back.out(2)"
-    });
-    
-    // Settle to final size
-    tl.to(announcement, {
-        scale: 1,
-        duration: 0.2,
-        ease: "power2.out"
-    });
-    
-    // Glow pulse effect
-    tl.to(announcement, {
-        textShadow: "0 0 40px rgba(0, 255, 255, 1), 0 0 80px rgba(0, 255, 255, 0.6)",
-        duration: 0.3,
-        yoyo: true,
-        repeat: 1,
-        ease: "power1.inOut"
-    }, "-=0.1");
-    
-    // Hold for a moment
-    tl.to({}, { duration: 1 });
-    
-    // Fade out while scaling up slightly (dramatic exit)
-    tl.to(announcement, {
-        scale: 1.5,
-        opacity: 0,
-        duration: 0.5,
-        ease: "power2.in"
+
+    tl.to(banner, { scale: 1, duration: 0.2, ease: 'power2.out' });
+
+    tl.to({}, { duration: 1 }); // Hold
+
+    tl.to(banner, {
+        scale: 1.35, opacity: 0,
+        duration: 0.45, ease: 'power2.in'
     });
 }
 
 /**
- * Show wave complete summary with animated stats
- * 
- * This uses GSAP to create a satisfying summary reveal:
- * - Box slides in from above
- * - Stats count up from zero (very satisfying!)
- * - Box slides out when done
- * 
- * @param {object} summary - Wave summary data
+ * Show the end-of-wave summary.
+ *
+ * The numbers count up rather than appearing. That is not decoration: a number
+ * that animates from zero is read as something earned, while the same number
+ * appearing instantly is read as a label. It is the cheapest reward mechanic
+ * there is.
+ *
+ * @param {object} summary - From getWaveSummary(), merged with awardWaveBonus()
  */
 export function showWaveSummary(summary) {
-    const summaryDiv = document.createElement('div');
-    summaryDiv.style.cssText = `
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        background: rgba(0, 20, 40, 0.95);
-        padding: 30px 50px;
-        border-radius: 10px;
-        border: 2px solid #00aaff;
-        z-index: 200;
-        text-align: center;
-        box-shadow: 0 0 30px rgba(0, 170, 255, 0.3);
-    `;
-    
-    // Create spans for animated numbers
-    summaryDiv.innerHTML = `
-        <h2 style="color: #00ffff; margin-bottom: 20px;">Wave Complete!</h2>
-        <p style="margin: 10px 0; color: #aaa;">Accuracy: <span class="stat-accuracy" style="color: #00ff00;">0%</span></p>
-        <p style="margin: 10px 0; color: #aaa;">Credits Earned: <span class="stat-credits" style="color: #ffff00;">+0</span></p>
-        <p style="margin: 10px 0; color: #aaa;">Score: <span class="stat-score" style="color: #00ffff;">+0</span></p>
-    `;
-    
-    document.body.appendChild(summaryDiv);
-    
-    // Get the stat elements for animation
-    const accuracyStat = summaryDiv.querySelector('.stat-accuracy');
-    const creditsStat = summaryDiv.querySelector('.stat-credits');
-    const scoreStat = summaryDiv.querySelector('.stat-score');
-    
-    // Create animation timeline
+    const panel = document.createElement('div');
+    panel.className = 'wave-summary';
+
+    const rows = [
+        { label: 'Accuracy', value: summary.accuracy, suffix: '%' },
+        { label: 'Wave bonus', value: summary.waveBonus || 0, prefix: '+', highlight: true },
+        { label: 'Accuracy bonus', value: summary.accuracyBonus || 0, prefix: '+', highlight: true },
+        { label: 'Credits earned', value: summary.credits, prefix: '+', highlight: true },
+        { label: 'Score', value: summary.score, prefix: '+' }
+    ];
+
+    const heading = document.createElement('h2');
+    heading.textContent = 'Wave Complete';
+    panel.appendChild(heading);
+
+    // Built with createElement rather than innerHTML. The values are internal
+    // numbers so there is nothing to escape here, but keeping the two habits
+    // apart means the one place that does take outside text cannot drift.
+    const valueElements = rows.map((row) => {
+        const line = document.createElement('div');
+        line.className = row.highlight ? 'wave-summary-row highlight' : 'wave-summary-row';
+
+        const label = document.createElement('span');
+        label.textContent = row.label;
+
+        const value = document.createElement('span');
+        value.textContent = `${row.prefix || ''}0${row.suffix || ''}`;
+
+        line.append(label, value);
+        panel.appendChild(line);
+
+        return value;
+    });
+
+    document.body.appendChild(panel);
+
+    const centre = { xPercent: -50, yPercent: -50 };
+
+    if (prefersReducedMotion()) {
+        gsap.set(panel, { ...centre, opacity: 1 });
+        rows.forEach((row, index) => {
+            valueElements[index].textContent =
+                `${row.prefix || ''}${Math.round(row.value)}${row.suffix || ''}`;
+        });
+        gsap.to(panel, { opacity: 0, duration: 0.4, delay: 2.4,
+                         onComplete: () => panel.remove() });
+        return;
+    }
+
     const tl = gsap.timeline({
         onComplete: () => {
-            // Fade out after showing
-            gsap.to(summaryDiv, {
-                opacity: 0,
-                y: -50,
-                duration: 0.5,
-                ease: "power2.in",
-                onComplete: () => summaryDiv.remove()
+            gsap.to(panel, {
+                opacity: 0, y: -40, duration: 0.45, ease: 'power2.in',
+                onComplete: () => panel.remove()
             });
         }
     });
-    
-    // Box slides in from above
-    tl.fromTo(summaryDiv,
-        { opacity: 0, y: -100, scale: 0.8 },
-        { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: "back.out(1.5)" }
+
+    tl.fromTo(panel,
+        { ...centre, opacity: 0, y: -80, scale: 0.85 },
+        { ...centre, opacity: 1, y: 0, scale: 1, duration: 0.45, ease: 'back.out(1.5)' }
     );
-    
-    // Animate the heading
-    const heading = summaryDiv.querySelector('h2');
-    tl.fromTo(heading,
-        { opacity: 0, scale: 0.8 },
-        { opacity: 1, scale: 1, duration: 0.3, ease: "back.out(2)" },
-        "-=0.2"
-    );
-    
-    // Count up the stats (very satisfying!)
-    // Accuracy
-    tl.to({ val: 0 }, {
-        val: summary.accuracy,
-        duration: 0.8,
-        ease: "power2.out",
-        onUpdate: function() {
-            accuracyStat.textContent = Math.round(this.targets()[0].val) + '%';
-        }
-    }, "-=0.1");
-    
-    // Credits (count up)
-    tl.to({ val: 0 }, {
-        val: summary.credits,
-        duration: 0.8,
-        ease: "power2.out",
-        onUpdate: function() {
-            creditsStat.textContent = '+' + Math.round(this.targets()[0].val);
-        }
-    }, "<"); // "<" means start at same time as previous
-    
-    // Score (count up)
-    tl.to({ val: 0 }, {
-        val: summary.score,
-        duration: 0.8,
-        ease: "power2.out",
-        onUpdate: function() {
-            scoreStat.textContent = '+' + Math.round(this.targets()[0].val);
-        }
-    }, "<");
-    
-    // Pulse the box border when stats finish
-    tl.to(summaryDiv, {
-        boxShadow: "0 0 50px rgba(0, 255, 255, 0.6)",
-        duration: 0.3,
-        yoyo: true,
-        repeat: 1
+
+    // Every counter starts together. Staggering them would make the panel take
+    // three times as long to read for no extra information.
+    rows.forEach((row, index) => {
+        const element = valueElements[index];
+
+        tl.to({ val: 0 }, {
+            val: row.value,
+            duration: 0.75,
+            ease: 'power2.out',
+            onUpdate() {
+                const current = Math.round(this.targets()[0].val);
+                element.textContent = `${row.prefix || ''}${current}${row.suffix || ''}`;
+            }
+        }, index === 0 ? '-=0.1' : '<');
     });
-    
-    // Hold for viewing
-    tl.to({}, { duration: 1.5 });
+
+    tl.to({}, { duration: 1.3 }); // Hold so it can actually be read
 }
 
 /**
@@ -716,4 +886,161 @@ export function worldToScreen(position, camera) {
         x: (vector.x * 0.5 + 0.5) * window.innerWidth,
         y: (-(vector.y * 0.5) + 0.5) * window.innerHeight
     };
+}
+
+// ==================== SELECTION PANEL ====================
+
+/*
+ * The panel that appears when a platform or the starbase is clicked.
+ *
+ * This module deliberately knows nothing about upgrade rules, refund rates or
+ * what a platform is. It renders a plain view object and reports clicks back
+ * through callbacks. selection.js decides what a selected thing looks like and
+ * upgrade.js decides what it costs - so a new upgradeable structure needs no
+ * change here at all.
+ */
+
+let selectionCallbacks = {
+    onUpgrade: null,
+    onSell: null,
+    onClose: null
+};
+
+/**
+ * Wire the panel's buttons.
+ *
+ * Listeners are attached once, here, rather than being rebuilt with the panel
+ * contents. Re-attaching on every render is the classic way to accumulate
+ * duplicate handlers and fire one click five times.
+ *
+ * @param {object} callbacks
+ * @param {Function} [callbacks.onUpgrade] - Receives the upgrade id
+ * @param {Function} [callbacks.onSell]
+ * @param {Function} [callbacks.onClose]
+ */
+export function setSelectionCallbacks(callbacks = {}) {
+    selectionCallbacks = { ...selectionCallbacks, ...callbacks };
+
+    if (elements.selectionClose && !elements.selectionClose.dataset.wired) {
+        elements.selectionClose.dataset.wired = 'true';
+        elements.selectionClose.addEventListener('click', () => {
+            if (selectionCallbacks.onClose) selectionCallbacks.onClose();
+        });
+    }
+
+    if (elements.selectionSell && !elements.selectionSell.dataset.wired) {
+        elements.selectionSell.dataset.wired = 'true';
+        elements.selectionSell.addEventListener('click', () => {
+            if (selectionCallbacks.onSell) selectionCallbacks.onSell();
+        });
+    }
+}
+
+/**
+ * Render the selection panel.
+ *
+ * @param {object} view - Everything the panel should show
+ * @param {string} view.name - Display name of the selected thing
+ * @param {Array<{label: string, value: string, upgraded?: boolean}>} view.stats
+ * @param {Array<{id: string, label: string, cost: number,
+ *                affordable: boolean, maxed: boolean}>} [view.upgrades]
+ * @param {number|null} [view.sellValue] - Refund, or null if it cannot be sold
+ */
+export function showSelectionPanel(view) {
+    if (!elements.selectionPanel) return;
+
+    elements.selectionPanel.hidden = false;
+
+    if (elements.selectionName) {
+        elements.selectionName.textContent = view.name;
+    }
+
+    renderSelectionStats(view.stats || []);
+    renderSelectionUpgrades(view.upgrades || []);
+
+    if (elements.selectionSell) {
+        const canSell = typeof view.sellValue === 'number';
+        elements.selectionSell.hidden = !canSell;
+
+        if (canSell) {
+            elements.selectionSell.textContent = `Sell for ${view.sellValue} cr`;
+        }
+    }
+}
+
+/**
+ * @param {Array<object>} stats
+ */
+function renderSelectionStats(stats) {
+    if (!elements.selectionStats) return;
+
+    elements.selectionStats.innerHTML = '';
+
+    stats.forEach((stat) => {
+        const label = document.createElement('dt');
+        label.textContent = stat.label;
+
+        const value = document.createElement('dd');
+        value.textContent = stat.value;
+
+        // Green means "this is above the base value" - the visible payoff for
+        // having spent credits, without needing to also print the base
+        if (stat.upgraded) value.classList.add('upgraded');
+
+        elements.selectionStats.append(label, value);
+    });
+}
+
+/**
+ * @param {Array<object>} upgrades
+ */
+function renderSelectionUpgrades(upgrades) {
+    if (!elements.selectionUpgrades) return;
+
+    elements.selectionUpgrades.innerHTML = '';
+
+    upgrades.forEach((upgrade) => {
+        const button = document.createElement('button');
+        button.className = 'upgrade-button';
+        button.dataset.upgrade = upgrade.id;
+
+        const label = document.createElement('span');
+        label.textContent = upgrade.label;
+
+        const cost = document.createElement('span');
+
+        if (upgrade.maxed) {
+            cost.className = 'upgrade-maxed';
+            cost.textContent = 'MAX';
+            button.disabled = true;
+        } else {
+            cost.className = 'upgrade-cost';
+            cost.textContent = `${upgrade.cost} cr`;
+            button.disabled = !upgrade.affordable;
+        }
+
+        button.append(label, cost);
+
+        // Safe to attach per render: these buttons are rebuilt each time, so
+        // each one is a fresh element that has never carried a listener
+        button.addEventListener('click', () => {
+            if (selectionCallbacks.onUpgrade) selectionCallbacks.onUpgrade(upgrade.id);
+        });
+
+        elements.selectionUpgrades.appendChild(button);
+    });
+}
+
+/**
+ * Hide the selection panel.
+ */
+export function hideSelectionPanel() {
+    if (elements.selectionPanel) elements.selectionPanel.hidden = true;
+}
+
+/**
+ * @returns {boolean} Whether the panel is currently showing
+ */
+export function isSelectionPanelOpen() {
+    return Boolean(elements.selectionPanel && !elements.selectionPanel.hidden);
 }

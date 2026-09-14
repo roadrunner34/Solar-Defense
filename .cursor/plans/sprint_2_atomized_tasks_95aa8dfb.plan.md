@@ -28,58 +28,58 @@ todos:
     status: completed
   - id: task-3.1
     content: Implement Enemy Detection - Find closest enemy in range for each platform
-    status: pending
+    status: completed
   - id: task-3.2
     content: Implement Platform Rotation/Tracking - Smooth turret rotation to face target
-    status: pending
+    status: completed
   - id: task-3.3
     content: Implement Platform Firing System (Laser Battery) - Fire projectiles at correct rate
-    status: pending
+    status: completed
   - id: task-3.4
     content: Create Platform Update Loop Integration - Integrate into main game loop
-    status: pending
+    status: completed
   - id: task-4.1
     content: Add Platform Costs to Economy Validation - canAffordPlatform() function
-    status: pending
+    status: completed
   - id: task-4.2
     content: Integrate Platform Purchase in Placement - Deduct credits on placement
-    status: pending
+    status: completed
   - id: task-4.3
     content: Implement Platform Selling System - Sell with 50% refund
-    status: pending
+    status: completed
   - id: task-5.1
     content: Create Platform Build Menu UI - HTML structure and styling
-    status: pending
+    status: completed
   - id: task-5.2
     content: Add Platform Selection Buttons - Click handlers and placement mode toggle
-    status: pending
+    status: completed
   - id: task-5.3
     content: Display Platform Cost Validation in UI - Disable buttons, show errors
-    status: pending
+    status: completed
   - id: task-5.4
     content: Add Platform Selection (Click to Select) - Raycast selection and stats panel
-    status: pending
+    status: completed
   - id: task-5.5
     content: Add Range Visualization on Selection - Show range indicator when selected
-    status: pending
+    status: completed
   - id: task-6.1
     content: Extend Projectile System for Multiple Types - Support laser and missile types
-    status: pending
+    status: completed
   - id: task-6.2
     content: Implement Missile-Specific Behavior - Different visuals, speed, and damage
-    status: pending
+    status: completed
   - id: task-6.3
     content: Integrate Missile Launcher Platform - Fire missile-type projectiles
-    status: pending
+    status: completed
   - id: task-7.1
     content: Add Platform Cleanup on Game Reset - clearAllPlatforms() function
-    status: pending
+    status: completed
   - id: task-7.2
     content: Add Platform Statistics Tracking - Track shots and kills per platform
-    status: pending
+    status: completed
   - id: task-7.3
     content: Performance Testing & Optimization - Ensure 60 FPS with 10+ platforms
-    status: pending
+    status: completed
 ---
 
 # Sprint 2: Deployable Platform System - Atomized Task Breakdown
@@ -284,13 +284,13 @@ Tasks are organized into **epics** (logical groupings) but broken down to the at
 
 **Acceptance Criteria**:
 
-- [ ] Create `findClosestEnemyInRange(platform)` function
-- [ ] Use existing `getClosestEnemy()` from `enemy.js` or similar logic
-- [ ] Check enemy is within platform's range (from stats)
-- [ ] Return enemy object or null if none in range
-- [ ] Test: Returns null when no enemies exist
-- [ ] Test: Returns closest enemy when multiple enemies in range
-- [ ] Test: Returns null when all enemies out of range
+- [x] Create `findClosestEnemyInRange(platform)` function
+- [x] Use existing `getClosestEnemy()` from `enemy.js` or similar logic
+- [x] Check enemy is within platform's range (from stats)
+- [x] Return enemy object or null if none in range
+- [x] Test: Returns null when no enemies exist
+- [x] Test: Returns closest enemy when multiple enemies in range
+- [x] Test: Returns null when all enemies out of range
 
 **Why first?** Targeting is the foundation of combat. Can test independently before firing.
 
@@ -306,13 +306,13 @@ Tasks are organized into **epics** (logical groupings) but broken down to the at
 
 **Acceptance Criteria**:
 
-- [ ] Create `updatePlatformRotation(platform, target, deltaTime)` function
-- [ ] Rotate platform turret to face target (similar to starbase logic)
-- [ ] Use smooth rotation (lerp) like starbase
-- [ ] Calculate angle difference and rotate shortest direction
-- [ ] Consider "aimed" when within 5 degrees of target
-- [ ] Test: Platform rotates to face moving enemy
-- [ ] Test: Rotation is smooth, not jittery
+- [x] Create `updatePlatformRotation(platform, target, deltaTime)` function
+- [x] Rotate platform turret to face target (similar to starbase logic)
+- [x] Use smooth rotation (lerp) like starbase
+- [x] Calculate angle difference and rotate shortest direction
+- [x] Consider "aimed" when within 5 degrees of target
+- [x] Test: Platform rotates to face moving enemy
+- [x] Test: Rotation is smooth, not jittery
 
 **Why separate?** Rotation is visual feedback. Can test targeting logic before firing works.
 
@@ -328,16 +328,16 @@ Tasks are organized into **epics** (logical groupings) but broken down to the at
 
 **Acceptance Criteria**:
 
-- [ ] Create `firePlatformProjectile(platform, target)` function
-- [ ] Check fire rate cooldown (time since last shot)
-- [ ] Calculate projectile spawn position (barrel tip)
-- [ ] Calculate direction to target
-- [ ] Call `createProjectile()` from `projectile.js` with platform stats
-- [ ] Set projectile source to platform ID/type
-- [ ] Reset fire cooldown after firing
-- [ ] Test: Platform fires at correct rate
-- [ ] Test: Projectiles spawn from barrel tip
-- [ ] Test: Projectiles travel toward target
+- [x] Create `firePlatformProjectile(platform, target)` function
+- [x] Check fire rate cooldown (time since last shot)
+- [x] Calculate projectile spawn position (barrel tip)
+- [x] Calculate direction to target
+- [x] Call `createProjectile()` from `projectile.js` with platform stats
+- [x] Set projectile source to platform ID/type
+- [x] Reset fire cooldown after firing
+- [x] Test: Platform fires at correct rate
+- [x] Test: Projectiles spawn from barrel tip
+- [x] Test: Projectiles travel toward target
 
 **Why separate?** Firing logic is complex. Can test each platform type independently.
 
@@ -353,13 +353,13 @@ Tasks are organized into **epics** (logical groupings) but broken down to the at
 
 **Acceptance Criteria**:
 
-- [ ] Create `updatePlatforms(deltaTime)` function
-- [ ] Loop through all platforms
-- [ ] For each platform: find target, rotate, fire
-- [ ] Integrate into main game loop in `main.js`
-- [ ] Test: All platforms update each frame
-- [ ] Test: Platforms work alongside starbase (no conflicts)
-- [ ] Test: Performance is acceptable with 5+ platforms
+- [x] Create `updatePlatforms(deltaTime)` function
+- [x] Loop through all platforms
+- [x] For each platform: find target, rotate, fire
+- [x] Integrate into main game loop in `main.js`
+- [x] Test: All platforms update each frame
+- [x] Test: Platforms work alongside starbase (no conflicts)
+- [x] Test: Performance is acceptable with 5+ platforms
 
 **Why this matters**: Integration ensures platforms work in the full game context.
 
@@ -377,12 +377,12 @@ Tasks are organized into **epics** (logical groupings) but broken down to the at
 
 **Acceptance Criteria**:
 
-- [ ] Create `canAffordPlatform(type)` function
-- [ ] Get platform cost from config
-- [ ] Check if player has enough credits
-- [ ] Return boolean
-- [ ] Test: Returns false when insufficient credits
-- [ ] Test: Returns true when player has enough credits
+- [x] Create `canAffordPlatform(type)` function
+- [x] Get platform cost from config
+- [x] Check if player has enough credits
+- [x] Return boolean
+- [x] Test: Returns false when insufficient credits
+- [x] Test: Returns true when player has enough credits
 
 **Why separate?** Economy validation is a simple, testable function.
 
@@ -398,13 +398,13 @@ Tasks are organized into **epics** (logical groupings) but broken down to the at
 
 **Acceptance Criteria**:
 
-- [ ] Check `canAffordPlatform()` before allowing placement
-- [ ] Call `spendCredits()` when platform is placed
-- [ ] Prevent placement if insufficient credits
-- [ ] Show error message/feedback when placement blocked (UI task)
-- [ ] Test: Cannot place platform without enough credits
-- [ ] Test: Credits are deducted when platform is placed
-- [ ] Test: Platform appears after purchase
+- [x] Check `canAffordPlatform()` before allowing placement
+- [x] Call `spendCredits()` when platform is placed
+- [x] Prevent placement if insufficient credits
+- [x] Show error message/feedback when placement blocked (UI task)
+- [x] Test: Cannot place platform without enough credits
+- [x] Test: Credits are deducted when platform is placed
+- [x] Test: Platform appears after purchase
 
 **Why separate?** Purchase logic is distinct from placement logic. Can test economy independently.
 
@@ -420,14 +420,14 @@ Tasks are organized into **epics** (logical groupings) but broken down to the at
 
 **Acceptance Criteria**:
 
-- [ ] Create `sellPlatform(platform)` function
-- [ ] Calculate refund (e.g., 50% of original cost)
-- [ ] Add refunded credits to economy
-- [ ] Remove platform from scene
-- [ ] Remove platform from platforms array
-- [ ] Test: Selling platform refunds correct amount
-- [ ] Test: Platform is removed from game
-- [ ] Test: Credits are added back to player
+- [x] Create `sellPlatform(platform)` function
+- [x] Calculate refund (e.g., 50% of original cost)
+- [x] Add refunded credits to economy
+- [x] Remove platform from scene
+- [x] Remove platform from platforms array
+- [x] Test: Selling platform refunds correct amount
+- [x] Test: Platform is removed from game
+- [x] Test: Credits are added back to player
 
 **Why separate?** Selling is a distinct feature with its own logic and UI needs.
 
@@ -445,12 +445,12 @@ Tasks are organized into **epics** (logical groupings) but broken down to the at
 
 **Acceptance Criteria**:
 
-- [ ] Create build menu HTML structure (or create dynamically)
-- [ ] Display all available platform types
-- [ ] Show platform name, cost, and basic stats (damage, range)
-- [ ] Style menu to match game aesthetic
-- [ ] Menu is visible and readable
-- [ ] Test: Menu displays all platform types correctly
+- [x] Create build menu HTML structure (or create dynamically)
+- [x] Display all available platform types
+- [x] Show platform name, cost, and basic stats (damage, range)
+- [x] Style menu to match game aesthetic
+- [x] Menu is visible and readable
+- [x] Test: Menu displays all platform types correctly
 
 **Why first?** UI structure is needed before interaction.
 
@@ -466,12 +466,12 @@ Tasks are organized into **epics** (logical groupings) but broken down to the at
 
 **Acceptance Criteria**:
 
-- [ ] Add click handlers to platform type buttons
-- [ ] Enter placement mode when button clicked
-- [ ] Store selected platform type
-- [ ] Show visual feedback (button highlight) when selected
-- [ ] Test: Clicking button enters placement mode
-- [ ] Test: Preview appears when in placement mode
+- [x] Add click handlers to platform type buttons
+- [x] Enter placement mode when button clicked
+- [x] Store selected platform type
+- [x] Show visual feedback (button highlight) when selected
+- [x] Test: Clicking button enters placement mode
+- [x] Test: Preview appears when in placement mode
 
 **Why separate?** Button interaction is distinct from menu display.
 
@@ -487,12 +487,12 @@ Tasks are organized into **epics** (logical groupings) but broken down to the at
 
 **Acceptance Criteria**:
 
-- [ ] Disable/gray out platform buttons when player can't afford
-- [ ] Show current credit balance in build menu
-- [ ] Update credit display in real-time
-- [ ] Show error message when trying to place without credits
-- [ ] Test: Buttons disable when insufficient credits
-- [ ] Test: Error message appears on invalid placement attempt
+- [x] Disable/gray out platform buttons when player can't afford
+- [x] Show current credit balance in build menu
+- [x] Update credit display in real-time
+- [x] Show error message when trying to place without credits
+- [x] Test: Buttons disable when insufficient credits
+- [x] Test: Error message appears on invalid placement attempt
 
 **Why separate?** UI feedback is distinct from logic. Can test affordability independently.
 
@@ -508,14 +508,14 @@ Tasks are organized into **epics** (logical groupings) but broken down to the at
 
 **Acceptance Criteria**:
 
-- [ ] Add click handler for selecting platforms (raycast to 3D objects)
-- [ ] Highlight selected platform visually
-- [ ] Show platform stats panel when selected
-- [ ] Display: damage, range, fire rate, type
-- [ ] Show sell button when platform selected
-- [ ] Test: Clicking platform selects it
-- [ ] Test: Stats panel displays correct information
-- [ ] Test: Only one platform selected at a time
+- [x] Add click handler for selecting platforms (raycast to 3D objects)
+- [x] Highlight selected platform visually
+- [x] Show platform stats panel when selected
+- [x] Display: damage, range, fire rate, type
+- [x] Show sell button when platform selected
+- [x] Test: Clicking platform selects it
+- [x] Test: Stats panel displays correct information
+- [x] Test: Only one platform selected at a time
 
 **Why separate?** Selection is a distinct interaction pattern from placement.
 
@@ -531,13 +531,13 @@ Tasks are organized into **epics** (logical groupings) but broken down to the at
 
 **Acceptance Criteria**:
 
-- [ ] Create range indicator (wireframe sphere or circle)
-- [ ] Show range indicator when platform is selected
-- [ ] Range indicator matches platform's range stat
-- [ ] Range indicator is visible and clear
-- [ ] Remove range indicator when platform deselected
-- [ ] Test: Range indicator appears on selection
-- [ ] Test: Range indicator size matches platform range
+- [x] Create range indicator (wireframe sphere or circle)
+- [x] Show range indicator when platform is selected
+- [x] Range indicator matches platform's range stat
+- [x] Range indicator is visible and clear
+- [x] Remove range indicator when platform deselected
+- [x] Test: Range indicator appears on selection
+- [x] Test: Range indicator size matches platform range
 
 **Why separate?** Visual feedback is a distinct feature that enhances UX.
 
@@ -555,13 +555,13 @@ Tasks are organized into **epics** (logical groupings) but broken down to the at
 
 **Acceptance Criteria**:
 
-- [ ] Add `projectileType` parameter to `createProjectile()`
-- [ ] Support 'laser' type (existing behavior - instant hit or fast travel)
-- [ ] Support 'missile' type (traveling projectile with different visual)
-- [ ] Create missile geometry/material (different from laser)
-- [ ] Missiles travel slower than lasers (configurable)
-- [ ] Test: Lasers work as before
-- [ ] Test: Missiles have different visual and speed
+- [x] Add `projectileType` parameter to `createProjectile()`
+- [x] Support 'laser' type (existing behavior - instant hit or fast travel)
+- [x] Support 'missile' type (traveling projectile with different visual)
+- [x] Create missile geometry/material (different from laser)
+- [x] Missiles travel slower than lasers (configurable)
+- [x] Test: Lasers work as before
+- [x] Test: Missiles have different visual and speed
 
 **Why separate?** Projectile types are a distinct system. Can test independently of platforms.
 
@@ -577,11 +577,11 @@ Tasks are organized into **epics** (logical groupings) but broken down to the at
 
 **Acceptance Criteria**:
 
-- [ ] Missiles can have different damage than lasers
-- [ ] Missiles can have explosion radius (for future area damage)
-- [ ] Missile visuals are distinct (e.g., rocket shape, trail effect)
-- [ ] Test: Missiles deal correct damage
-- [ ] Test: Missiles look different from lasers
+- [x] Missiles can have different damage than lasers
+- [x] Missiles can have explosion radius (for future area damage)
+- [x] Missile visuals are distinct (e.g., rocket shape, trail effect)
+- [x] Test: Missiles deal correct damage
+- [x] Test: Missiles look different from lasers
 
 **Why separate?** Missile-specific features are distinct from base projectile system.
 
@@ -597,10 +597,10 @@ Tasks are organized into **epics** (logical groupings) but broken down to the at
 
 **Acceptance Criteria**:
 
-- [ ] Missile Launcher fires missile-type projectiles
-- [ ] Missile Launcher uses correct projectile stats from config
-- [ ] Test: Missile Launcher fires missiles (not lasers)
-- [ ] Test: Missiles behave correctly (travel, hit enemies)
+- [x] Missile Launcher fires missile-type projectiles
+- [x] Missile Launcher uses correct projectile stats from config
+- [x] Test: Missile Launcher fires missiles (not lasers)
+- [x] Test: Missiles behave correctly (travel, hit enemies)
 
 **Why separate?** Platform-specific projectile integration is a distinct task.
 
@@ -618,12 +618,12 @@ Tasks are organized into **epics** (logical groupings) but broken down to the at
 
 **Acceptance Criteria**:
 
-- [ ] Create `clearAllPlatforms()` function
-- [ ] Remove all platforms from scene
-- [ ] Clear platforms array
-- [ ] Call on game restart/reset
-- [ ] Test: Platforms are removed when game resets
-- [ ] Test: No memory leaks (platforms properly disposed)
+- [x] Create `clearAllPlatforms()` function
+- [x] Remove all platforms from scene
+- [x] Clear platforms array
+- [x] Call on game restart/reset
+- [x] Test: Platforms are removed when game resets
+- [x] Test: No memory leaks (platforms properly disposed)
 
 **Why separate?** Cleanup is important for game state management.
 
@@ -639,11 +639,11 @@ Tasks are organized into **epics** (logical groupings) but broken down to the at
 
 **Acceptance Criteria**:
 
-- [ ] Track shots fired per platform
-- [ ] Track kills per platform
-- [ ] Store stats in platform object
-- [ ] Test: Stats are tracked correctly
-- [ ] Test: Stats persist for platform lifetime
+- [x] Track shots fired per platform
+- [x] Track kills per platform
+- [x] Store stats in platform object
+- [x] Test: Stats are tracked correctly
+- [x] Test: Stats persist for platform lifetime
 
 **Why separate?** Statistics are useful for balance testing and future features.
 
@@ -659,11 +659,11 @@ Tasks are organized into **epics** (logical groupings) but broken down to the at
 
 **Acceptance Criteria**:
 
-- [ ] Test with 10+ platforms active
-- [ ] Maintain 60 FPS with multiple platforms
-- [ ] Optimize enemy detection (avoid checking all enemies for all platforms each frame)
-- [ ] Consider spatial partitioning if needed
-- [ ] Test: Game runs smoothly with many platforms
+- [x] Test with 10+ platforms active
+- [x] Maintain 60 FPS with multiple platforms
+- [x] Optimize enemy detection (avoid checking all enemies for all platforms each frame)
+- [x] Consider spatial partitioning if needed
+- [x] Test: Game runs smoothly with many platforms
 
 **Why last?** Optimization should happen after features are complete.
 
@@ -707,16 +707,16 @@ Epic 7 (Polish):
 
 ## Sprint 2 Definition of Done (Revisited)
 
-- [ ] Player can place platforms at valid locations
-- [ ] Platforms auto-target and fire at enemies
-- [ ] Different platform types have distinct behaviors
-- [ ] Credit system prevents unlimited building
-- [ ] Platform range visualization when placing
-- [ ] Platform selling/removal works with refunds
-- [ ] UI clearly shows placement options and costs
-- [ ] Platforms work alongside starbase
-- [ ] Minimum distance between platforms enforced
-- [ ] Game performs well with multiple platforms (10+)
+- [x] Player can place platforms at valid locations
+- [x] Platforms auto-target and fire at enemies
+- [x] Different platform types have distinct behaviors
+- [x] Credit system prevents unlimited building
+- [x] Platform range visualization when placing
+- [x] Platform selling/removal works with refunds
+- [x] UI clearly shows placement options and costs
+- [x] Platforms work alongside starbase
+- [x] Minimum distance between platforms enforced
+- [x] Game performs well with multiple platforms (10+)
 
 ## Estimated Total Effort
 

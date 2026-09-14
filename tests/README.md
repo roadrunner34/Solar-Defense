@@ -1,37 +1,54 @@
-# Tests Directory
+# Tests
 
-This directory contains all test files for the Solar Defense game.
+Automated tests for Solar Defense, run with [Vitest](https://vitest.dev/).
 
-## Folder Structure
+## Running
+
+```bash
+npm test         # run once
+npm run test:watch   # re-run on change
+```
+
+## Layout
 
 ```
 tests/
-├── config/              # Tests for configuration files
-│   └── platform-config.test.js
-└── README.md            # This file
+├── config.test.js           # CONFIG contents, helpers, endless wave ramp
+├── economy.test.js          # credits, score, accuracy, best-run persistence
+├── effects.test.js          # the step-driven effect scheduler
+├── enemy.test.js            # spawning, movement, damage, health bars
+├── mathUtils.test.js        # damping, easing, clamping
+├── particles.test.js        # pool recycling
+├── path.test.js             # enemy path geometry and travel speed
+├── platform.test.js         # creation, placement rules, overlap
+├── platform-combat.test.js  # targeting, firing, economy, selling
+├── projectile.test.js       # laser vs missile, homing, splash damage
+├── textures.test.js         # procedural noise and the headless fallback
+├── ui.test.js               # HUD and build menu
+└── upgrade.test.js          # tiers, costs, investment
 ```
 
-## Running Tests
+## Environment
 
-### Option 1: Using the Test HTML File
-Open `test-platform-config.html` in your browser. Tests will run automatically.
+Tests default to Vitest's `node` environment — most of the game's logic is
+pure and needs no DOM. Three.js scene construction works headless too: every
+texture factory in `textures.js` returns a blank texture when there is no 2D
+canvas context, as does the lensflare texture in `scene.js`. `textures.test.js`
+guards that fallback specifically, since four other files rely on it to be able
+to build a scene at all.
 
-### Option 2: Browser Console
-1. Open the main game (`index.html`) in your browser
-2. Open the browser console (F12)
-3. Type: `runPlatformConfigTests()` and press Enter
+A file that genuinely needs a DOM (anything touching `document`, such as the
+enemy health bars) opts in with a docblock on its first line:
 
-## Adding New Tests
+```js
+// @vitest-environment jsdom
+```
 
-When adding new test files:
-- Place them in the appropriate subdirectory (e.g., `config/`, `platforms/`, etc.)
-- Follow the naming convention: `*.test.js`
-- Export a test runner function (e.g., `runPlatformConfigTests()`)
-- Make the function available globally for console access if needed
+## Conventions
 
-## Why Separate Test Files?
-
-- **Separation of Concerns**: Production code stays clean and focused
-- **Organization**: Easy to find and manage tests
-- **Scalability**: As the project grows, tests are organized by feature
-- **Maintainability**: Changes to tests don't affect production code
+- One spec per source module, named `<module>.test.js`.
+- Use `describe` / `it` / `expect`; no hand-rolled pass/fail counters.
+- Modules holding state at module scope (`economy.js`, `platform.js`) must be
+  reset in `beforeEach` so tests don't depend on execution order.
+- When fixing a bug, add the failing case first and name the test after the
+  behaviour, not the bug number.

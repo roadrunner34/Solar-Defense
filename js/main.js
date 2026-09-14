@@ -14,30 +14,34 @@
 
 import * as THREE from 'three';
 
-// ==================== POST-PROCESSING IMPORTS ====================
-// These add visual effects like bloom (glow), color correction, etc.
-// The EffectComposer chains multiple effects together efficiently
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+// The render pipeline - composer chain, colour grade, quality tiers - lives
+// in its own module. main.js only needs to start it, step it and resize it.
+import { initQuality, initPostProcessing, renderFrame, resizePostProcessing, sampleFrame,
+         flashDamageVignette, resetPostProcessing, setQualityTier,
+         getQualityTier, getFrameStats } from './postprocessing.js';
 
 // Import all our game systems
-import { createScene, scene, updateScene } from './scene.js';
+import { createScene, scene, updateScene, hitPlanetShield, resetPlanetShield } from './scene.js';
 import { createCamera, camera, updateCamera, handleResize, shakeCamera } from './camera.js';
-import { initInput, enterPlacementMode, exitPlacementMode, isInPlacementMode, clearInputFlags } from './input.js';
+import { initInput, enterPlacementMode, exitPlacementMode, isInPlacementMode,
+         clearInputFlags, inputState } from './input.js';
+import { initSelection, handleSelectionClick, clearSelection, refreshPanel,
+         resetSelection, getSelected } from './selection.js';
 import { initPaths, getRandomPathName } from './path.js';
 import { initEnemies, spawnEnemy, updateEnemies, clearEnemies, 
          projectHealthBars, getEnemyCount, enemies } from './enemy.js';
 import { createStarbase, updateStarbase, resetStarbaseStats } from './starbase.js';
 import { createProjectile, updateProjectiles, clearProjectiles, createHitEffect } from './projectile.js';
 import { initParticles, updateParticles, createEnemyDeathEffect, createMuzzleSparks } from './particles.js';
+import { updateEffects, clearEffects } from './effects.js';
+import { updatePlatforms, clearAllPlatforms, placementState, platforms } from './platform.js';
 import { initEconomy, recordKill, recordShot, recordHit, awardWaveBonus,
-         resetWaveTracking, getWaveSummary, getCredits, getScore } from './economy.js';
+         resetWaveTracking, getWaveSummary, getCredits, getScore,
+         saveProgress, loadBestRun } from './economy.js';
 import { initUI, setupUICallbacks, updateHUD, showScreen, hideAllScreens,
          setHUDVisible, showDamageNumber, showFloatingText, showWaveAnnouncement,
-         showWaveSummary, worldToScreen } from './ui.js';
+         showWaveSummary, worldToScreen, initBuildMenu, initIntegrityPips,
+         updateIntegrity, showBestRecord, showTooltip } from './ui.js';
 import { CONFIG, getWaveConfig } from './config.js';
 
 // ==================== GAME STATE ====================
@@ -57,20 +61,40 @@ let currentState = GameState.MENU;
 // ==================== GAME VARIABLES ====================
 
 let renderer;
-let clock;
-let composer; // Post-processing effect composer
+let timer;
 let currentWave = 1;
-let totalWaves = 5; // Number of waves to win
+
+// Waves in the authored campaign. Beyond this the game does not end - it hands
+// the player the choice of stopping on a win or continuing into generated
+// waves. The old hard cap here made config.js's scaling generator unreachable.
+const CAMPAIGN_WAVES = 5;
+let endlessMode = false;
+
+// Planet integrity. Replaces the old rule where one leaked enemy ended the run.
+let planetIntegrity = CONFIG.planet.integrity;
+
+// Enemies cleared this wave, for the HUD progress bar
+let enemiesClearedThisWave = 0;
+
+// The selection panel is rebuilt on a timer rather than every frame: its
+// contents include kill counts and upgrade affordability, which do change
+// during play, but rebuilding a dozen DOM nodes at 60Hz to show a number that
+// moves once a second is pure waste.
+let panelRefreshTimer = 0;
+const PANEL_REFRESH_INTERVAL = 0.4;
 let enemiesSpawnedThisWave = 0;
 let enemiesToSpawnThisWave = 0;
 let spawnTimer = 0;
-let currentSpawnDelay = 2;
-let currentEnemyTypeIndex = 0;
 let waveEnemyQueue = []; // Queue of enemies to spawn
 
 // For wave transition timing
 let waveTransitionTimer = 0;
 const WAVE_TRANSITION_DELAY = 3; // Seconds between waves
+
+// Hit-stop: the brief slow-motion stall on a kill. See applyHitStop().
+const HIT_STOP_SCALE = 0.18;
+let hitStopRemaining = 0;
+let activeTimescale = 1;
 
 // ==================== INITIALIZATION ====================
 
@@ -85,7 +109,6 @@ function init() {
     // toneMapping helps with HDR-like effects (bright colors look better with bloom)
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Limit for performance
     renderer.toneMapping = THREE.ACESFilmicToneMapping; // Cinematic tone mapping
     renderer.toneMappingExposure = 1.0;
     
@@ -93,14 +116,20 @@ function init() {
     const container = document.getElementById('game-container');
     container.appendChild(renderer.domElement);
     
-    // Initialize Three.js scene and camera
-    createScene();
+    // Pick a quality tier before anything is built. Scene density is baked
+    // into geometry, so this has to happen ahead of createScene().
+    initQuality();
+
+    // Initialize Three.js scene and camera. The renderer goes to createScene
+    // because the environment map has to be rendered to a cubemap.
+    createScene(renderer);
     createCamera(renderer);
     
     // ==================== POST-PROCESSING SETUP ====================
-    // The EffectComposer chains rendering passes together
-    // Each pass adds a visual effect to the final image
-    setupPostProcessing();
+    // Picks a quality tier for this device, then builds the composer chain.
+    // It also sets the renderer's pixel ratio, so that has to happen here
+    // rather than alongside the other renderer options above.
+    initPostProcessing(renderer, scene, camera);
     
     // Initialize game systems
     initInput();
@@ -120,8 +149,18 @@ function init() {
     setupUICallbacks({
         onStart: startGame,
         onRestart: restartGame,
-        onResume: resumeGame
+        onResume: resumeGame,
+        onContinueEndless: continueEndless
     });
+
+    // Clicking a placed platform or the starbase opens the stats/upgrade panel
+    initSelection();
+
+    // Show the saved best run, if there is one
+    showSavedRecord();
+    
+    // Build the platform build menu from the configured platform types
+    initBuildMenu(enterPlacementMode);
     
     // Handle window resize
     window.addEventListener('resize', onWindowResize);
@@ -129,9 +168,17 @@ function init() {
     // Handle pause with Escape key
     window.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
-            // If in placement mode, just exit placement (don't pause)
+            // Escape unwinds one layer at a time: placement first, then the
+            // selection panel, and only pauses when there is nothing else to
+            // dismiss. Jumping straight to pause would make it impossible to
+            // close a panel without stopping the game.
             if (isInPlacementMode()) {
                 exitPlacementMode();
+                return;
+            }
+
+            if (getSelected()) {
+                clearSelection();
                 return;
             }
             
@@ -142,25 +189,47 @@ function init() {
             }
         }
         
-        // ==================== TEMPORARY DEBUG KEYS ====================
-        // These allow testing placement without the full UI
-        // Press 1 for Laser Battery, 2 for Missile Launcher
-        // TODO: Remove these when UI is implemented (Task 5.x)
+        // ==================== DEBUG HOTKEYS ====================
+        // F toggles the frame readout, G cycles quality manually. These make
+        // Sprint 0's never-verified '60 FPS on target hardware' criterion
+        // something you can actually check rather than assert.
+        if (e.key === 'f' || e.key === 'F') {
+            debugVisible = !debugVisible;
+            if (!debugVisible && debugElement) debugElement.style.display = 'none';
+        }
+
+        if (e.key === 'g' || e.key === 'G') {
+            const order = ['high', 'medium', 'low'];
+            const next = order[(order.indexOf(getQualityTier()) + 1) % order.length];
+            setQualityTier(next);
+        }
+
+        // ==================== BUILD HOTKEYS ====================
+        // Number keys mirror the build menu, in config order: the nth platform
+        // type is on the nth number key. ui.js labels the buttons the same way,
+        // so adding a platform type to the config wires up its hotkey too.
         if (currentState === GameState.PLAYING) {
-            if (e.key === '1') {
-                enterPlacementMode('laserBattery');
-                console.log('DEBUG: Press 1 - Laser Battery placement mode');
-            } else if (e.key === '2') {
-                enterPlacementMode('missileLauncher');
-                console.log('DEBUG: Press 2 - Missile Launcher placement mode');
+            const platformTypes = Object.keys(CONFIG.platforms);
+            const index = Number(e.key) - 1;
+            
+            if (Number.isInteger(index) && index >= 0 && index < platformTypes.length) {
+                enterPlacementMode(platformTypes[index]);
             }
         }
     });
 
     
     
-    // Create clock for delta time calculation
-    clock = new THREE.Clock();
+    // Create the timer for delta time calculation.
+    //
+    // THREE.Timer replaces the deprecated THREE.Clock (deprecated in r183) and
+    // suits this game better in two ways: setTimescale(0) is an explicit pause
+    // that Clock never really offered - Clock.stop() was a no-op here, because
+    // autoStart restarted it on the next getDelta() - and connect(document)
+    // zeroes the delta while the tab is hidden, so returning to a backgrounded
+    // game no longer fast-forwards it.
+    timer = new THREE.Timer();
+    timer.connect(document);
     
     // Show start screen
     showScreen('start');
@@ -171,221 +240,73 @@ function init() {
     console.log('Solar Defense - Ready!');
 }
 
-/**
- * Set up post-processing effects
- * 
- * Post-processing works like Instagram filters - the scene is rendered first,
- * then effects are applied on top. We use:
- * 
- * 1. RenderPass - Renders the base scene (required first step)
- * 2. UnrealBloomPass - Adds glow/bloom to bright objects (makes lasers and sun glow!)
- * 3. VignetteColorGradePass - Darkens edges + color grading for cinematic look
- * 4. OutputPass - Final color correction and output
- * 
- * The "bloom" effect makes anything bright appear to glow and bleed light
- * into surrounding areas. It's what makes sci-fi games look so polished!
- */
-function setupPostProcessing() {
-    // Create the composer - it manages the chain of effects
-    composer = new EffectComposer(renderer);
-    
-    // Pass 1: Render the scene normally
-    // This is always the first pass - it provides the base image
-    const renderPass = new RenderPass(scene, camera);
-    composer.addPass(renderPass);
-    
-    // Pass 2: Bloom effect (the magic!)
-    // Parameters: resolution, strength, radius, threshold
-    // - resolution: Size of the bloom texture (uses screen size)
-    // - strength: How intense the glow is (higher = brighter glow)
-    // - radius: How far the glow spreads (higher = wider glow)
-    // - threshold: Brightness level where bloom starts (lower = more things glow)
-    const bloomPass = new UnrealBloomPass(
-        new THREE.Vector2(window.innerWidth, window.innerHeight),
-        0.8,    // strength - moderate glow
-        0.4,    // radius - medium spread
-        0.2     // threshold - only bright things glow (sun, projectiles, etc.)
-    );
-    composer.addPass(bloomPass);
-    
-    // Store bloom pass so we can adjust settings later if needed
-    composer.bloomPass = bloomPass;
-    
-    // Pass 3: Vignette + Color Grading effect
-    // This creates a custom shader that:
-    // - Darkens the edges of the screen (vignette) for a cinematic look
-    // - Applies color grading to give a space/sci-fi feel (cooler blues, warmer highlights)
-    const vignetteColorGradePass = new ShaderPass(VignetteColorGradeShader);
-    vignetteColorGradePass.uniforms.vignetteIntensity.value = 0.4; // How dark the edges get
-    vignetteColorGradePass.uniforms.vignetteRadius.value = 0.75; // How far from center vignette starts
-    vignetteColorGradePass.uniforms.colorTint.value.set(0.1, 0.15, 0.2); // Subtle blue tint
-    vignetteColorGradePass.uniforms.contrast.value = 1.1; // Slight contrast boost
-    vignetteColorGradePass.uniforms.saturation.value = 1.15; // Slightly more vibrant
-    composer.addPass(vignetteColorGradePass);
-    
-    // Store for potential adjustments
-    composer.vignettePass = vignetteColorGradePass;
-    
-    // Pass 4: Output pass - ensures correct color space
-    // Without this, colors might look washed out
-    const outputPass = new OutputPass();
-    composer.addPass(outputPass);
-    
-    console.log('Post-processing initialized with bloom, vignette, and color grading');
-}
-
-/**
- * Custom Vignette + Color Grading Shader
- * 
- * SHADERS EXPLAINED:
- * ==================
- * Shaders are small programs that run on the GPU. They're SUPER fast because
- * they run in parallel on thousands of GPU cores. There are two types:
- * 
- * Vertex Shader: Positions each vertex (corner) of geometry
- * Fragment Shader: Determines the color of each pixel
- * 
- * This shader is a "post-processing" shader - it takes the rendered image
- * and modifies each pixel to add effects.
- * 
- * UNIFORMS: Values passed from JavaScript to the shader
- * VARYINGS: Values passed from vertex shader to fragment shader
- */
-const VignetteColorGradeShader = {
-    uniforms: {
-        // The input texture (the rendered scene)
-        tDiffuse: { value: null },
-        
-        // Vignette settings
-        vignetteIntensity: { value: 0.5 }, // How dark edges get (0-1)
-        vignetteRadius: { value: 0.75 },   // Where vignette starts (0=center, 1=edge)
-        
-        // Color grading
-        colorTint: { value: new THREE.Vector3(0, 0, 0) }, // RGB tint added to shadows
-        contrast: { value: 1.0 },     // 1 = normal, >1 = more contrast
-        saturation: { value: 1.0 }    // 1 = normal, >1 = more saturated
-    },
-    
-    // Vertex shader - just passes through position and UV coordinates
-    // UV coordinates tell us where we are on the texture (0,0 = bottom-left, 1,1 = top-right)
-    vertexShader: /* glsl */`
-        varying vec2 vUv;
-        
-        void main() {
-            vUv = uv;
-            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-    `,
-    
-    // Fragment shader - this is where the magic happens!
-    // Runs once for EVERY pixel on screen
-    fragmentShader: /* glsl */`
-        uniform sampler2D tDiffuse;
-        uniform float vignetteIntensity;
-        uniform float vignetteRadius;
-        uniform vec3 colorTint;
-        uniform float contrast;
-        uniform float saturation;
-        
-        varying vec2 vUv;
-        
-        void main() {
-            // Sample the original pixel color
-            vec4 color = texture2D(tDiffuse, vUv);
-            
-            // ========== VIGNETTE ==========
-            // Calculate distance from center of screen (0,0 to 1,1, so center is 0.5,0.5)
-            vec2 center = vUv - vec2(0.5);
-            float dist = length(center) * 1.414; // *1.414 normalizes diagonal to 1.0
-            
-            // Create smooth falloff from center to edges
-            // smoothstep creates a nice S-curve transition
-            float vignette = smoothstep(vignetteRadius, vignetteRadius + 0.5, dist);
-            vignette = 1.0 - vignette * vignetteIntensity;
-            
-            // Apply vignette (darken edges)
-            color.rgb *= vignette;
-            
-            // ========== COLOR GRADING ==========
-            
-            // Apply contrast
-            // This pushes colors away from middle gray (0.5)
-            color.rgb = (color.rgb - 0.5) * contrast + 0.5;
-            
-            // Apply saturation
-            // We calculate luminance (grayscale) and blend toward it
-            float luminance = dot(color.rgb, vec3(0.299, 0.587, 0.114));
-            color.rgb = mix(vec3(luminance), color.rgb, saturation);
-            
-            // Apply color tint to shadows
-            // The tint is stronger in darker areas
-            float shadowAmount = 1.0 - luminance;
-            color.rgb += colorTint * shadowAmount * 0.3;
-            
-            // Output final color
-            gl_FragColor = color;
-        }
-    `
-};
-
-/**
- * Update vignette intensity (can be called during gameplay)
- * For example, increase vignette when player is low on health
- * 
- * @param {number} intensity - Vignette darkness (0-1)
- */
-export function setVignetteIntensity(intensity) {
-    if (composer && composer.vignettePass) {
-        composer.vignettePass.uniforms.vignetteIntensity.value = intensity;
-    }
-}
-
-/**
- * Apply a temporary red vignette effect (damage feedback)
- * 
- * @param {number} duration - How long the effect lasts (ms)
- */
-export function flashDamageVignette(duration = 300) {
-    if (composer && composer.vignettePass) {
-        const pass = composer.vignettePass;
-        const originalIntensity = pass.uniforms.vignetteIntensity.value;
-        const originalTint = pass.uniforms.colorTint.value.clone();
-        
-        // Red damage flash
-        pass.uniforms.vignetteIntensity.value = 0.7;
-        pass.uniforms.colorTint.value.set(0.4, 0, 0); // Red tint
-        
-        // Reset after duration
-        setTimeout(() => {
-            pass.uniforms.vignetteIntensity.value = originalIntensity;
-            pass.uniforms.colorTint.value.copy(originalTint);
-        }, duration);
-    }
-}
-
 // ==================== GAME STATE MANAGEMENT ====================
 
 /**
  * Start a new game
  */
 function startGame() {
-    console.log('Starting game...');
     
     currentState = GameState.PLAYING;
     currentWave = 1;
-    
+    endlessMode = false;
+
     // Reset systems
     clearEnemies();
     clearProjectiles();
+    clearAllPlatforms();
+    clearEffects();
+    resetPostProcessing();
     resetStarbaseStats();
+    resetSelection();
     initEconomy();
-    
+
+    // Restore the planet
+    planetIntegrity = CONFIG.planet.integrity;
+    initIntegrityPips(planetIntegrity);
+    updateIntegrity(planetIntegrity);
+    resetPlanetShield();
+
+    // A restart can arrive straight from the pause screen, so make sure time
+    // is running again
+    setTimescale(1);
+
     // Hide menu, show HUD
     hideAllScreens();
     setHUDVisible(true);
-    
+
     // Start first wave
     startWave(currentWave);
+
+    maybeShowFirstRunHints();
+}
+
+/**
+ * Show the onboarding hints, once ever.
+ *
+ * showTooltip() has existed in ui.js since Sprint 1 with a full stylesheet
+ * entry and no caller anywhere in the codebase - scaffolding for a tutorial
+ * that was scheduled into Sprint 5 and never reached. It is finally used here.
+ *
+ * Gated on localStorage rather than a session flag, so it is genuinely a
+ * first-run experience rather than something a returning player sits through
+ * on every restart.
+ */
+function maybeShowFirstRunHints() {
+    try {
+        if (localStorage.getItem('solarDefense_seenHints')) return;
+        localStorage.setItem('solarDefense_seenHints', 'true');
+    } catch {
+        // Private browsing, or storage disabled. Showing the hints once per
+        // session is a better failure than never showing them at all.
+    }
+
+    showTooltip(
+        'Your starbase fires itself',
+        'You never aim. Spend credits on platforms and decide where they go - ' +
+        'that is the whole game. Press 1 or 2, then click a spot.',
+        24, window.innerHeight - 260, 9000
+    );
 }
 
 /**
@@ -403,7 +324,11 @@ function pauseGame() {
     
     currentState = GameState.PAUSED;
     showScreen('pause');
-    clock.stop();
+    
+    // Freeze time. Everything driven by deltaTime - enemies, projectiles,
+    // particles and one-shot effects - stops with it, while the render loop
+    // and camera controls keep running so the paused scene stays live.
+    setTimescale(0);
 }
 
 /**
@@ -411,19 +336,24 @@ function pauseGame() {
  */
 function resumeGame() {
     if (currentState !== GameState.PAUSED) return;
+
+    // Drop any hit-stop that was in flight when the player paused, so the
+    // game does not resume into a stall it has no way to count down
+    hitStopRemaining = 0;
     
     currentState = GameState.PLAYING;
     hideAllScreens();
-    clock.start();
+    setTimescale(1);
 }
 
 /**
  * Handle victory
  */
 function handleVictory() {
-    console.log('Victory!');
     currentState = GameState.VICTORY;
+    clearSelection();
     setHUDVisible(false);
+    recordRun();
     showScreen('victory');
 }
 
@@ -431,10 +361,33 @@ function handleVictory() {
  * Handle defeat
  */
 function handleDefeat() {
-    console.log('Defeat!');
     currentState = GameState.DEFEAT;
+    clearSelection();
     setHUDVisible(false);
+    recordRun();
     showScreen('defeat');
+}
+
+/**
+ * Save this run if it beat the stored best, then refresh the start screen line.
+ *
+ * saveProgress() and loadProgress() have been sitting in economy.js since
+ * Sprint 1 with no call sites anywhere. This is the first thing to use them.
+ */
+function recordRun() {
+    saveProgress({ wave: currentWave, score: getScore() });
+    showSavedRecord();
+}
+
+/**
+ * Put the stored best run on the start screen, if there is one.
+ */
+function showSavedRecord() {
+    const best = loadBestRun();
+
+    showBestRecord(
+        best ? `Best: wave ${best.wave} · ${best.score.toLocaleString()} points` : null
+    );
 }
 
 // ==================== WAVE MANAGEMENT ====================
@@ -444,7 +397,6 @@ function handleDefeat() {
  * @param {number} waveNumber - Which wave to start
  */
 function startWave(waveNumber) {
-    console.log(`Starting Wave ${waveNumber}`);
     
     const waveConfig = getWaveConfig(waveNumber);
     
@@ -464,8 +416,8 @@ function startWave(waveNumber) {
     
     enemiesToSpawnThisWave = waveEnemyQueue.length;
     enemiesSpawnedThisWave = 0;
+    enemiesClearedThisWave = 0;
     spawnTimer = 0;
-    currentEnemyTypeIndex = 0;
     
     // Reset wave tracking
     resetWaveTracking();
@@ -478,32 +430,49 @@ function startWave(waveNumber) {
  * Complete current wave and move to next
  */
 function completeWave() {
-    console.log(`Wave ${currentWave} complete!`);
     
     currentState = GameState.WAVE_COMPLETE;
     
-    // Award wave bonus
+    // Award the wave bonus and fold its breakdown into the summary, so the
+    // player can see where the credits came from rather than just a total
     const bonusResult = awardWaveBonus(currentWave);
-    
-    // Show wave summary
-    const summary = getWaveSummary();
-    showWaveSummary(summary);
+    showWaveSummary({ ...getWaveSummary(), ...bonusResult });
     
     waveTransitionTimer = WAVE_TRANSITION_DELAY;
 }
 
 /**
- * Move to next wave or victory
+ * Move to the next wave, or offer the win.
+ *
+ * Clearing the authored campaign is a victory, but it is no longer the end of
+ * the game: the victory screen offers "Hold the Line", which drops into
+ * endless mode. Waves past the campaign come from getWaveConfig()'s scaling
+ * branch in config.js, which existed since Sprint 1 and was unreachable
+ * because this function used to hard-stop at five.
  */
 function nextWave() {
     currentWave++;
-    
-    if (currentWave > totalWaves) {
+
+    if (currentWave > CAMPAIGN_WAVES && !endlessMode) {
         handleVictory();
-    } else {
-        currentState = GameState.PLAYING;
-        startWave(currentWave);
+        return;
     }
+
+    currentState = GameState.PLAYING;
+    startWave(currentWave);
+}
+
+/**
+ * Continue past the campaign into generated waves.
+ * Wired to the victory screen's "Hold the Line" button.
+ */
+function continueEndless() {
+    endlessMode = true;
+    currentState = GameState.PLAYING;
+
+    hideAllScreens();
+    setHUDVisible(true);
+    startWave(currentWave);
 }
 
 // ==================== GAME LOOP ====================
@@ -512,13 +481,28 @@ function nextWave() {
  * Main game loop
  * This runs every frame (ideally 60 times per second)
  */
-function animate() {
+function animate(timestamp) {
     // Request next frame (this creates the loop)
     requestAnimationFrame(animate);
+
+    // Feed the render watchdog the RAW timestamp. The game delta below is
+    // clamped and gets zeroed by pause, so it says nothing about how hard the
+    // GPU is actually working - which is exactly what the watchdog needs.
+    sampleFrame(timestamp);
     
     // Calculate delta time (time since last frame)
-    const deltaTime = Math.min(clock.getDelta(), 0.1); // Cap at 100ms to prevent huge jumps
-    
+    timer.update(timestamp);
+    const deltaTime = Math.min(timer.getDelta(), 0.1); // Cap at 100ms to prevent huge jumps
+
+    // Run down any hit-stop. deltaTime arrives already multiplied by the
+    // timescale, so dividing it back out recovers real elapsed seconds - which
+    // is what the stall should be measured in, or a heavier stall would also
+    // last proportionally longer.
+    if (hitStopRemaining > 0 && activeTimescale > 0) {
+        hitStopRemaining -= deltaTime / activeTimescale;
+        if (hitStopRemaining <= 0) setTimescale(1);
+    }
+
     // Only update game logic if playing
     if (currentState === GameState.PLAYING) {
         update(deltaTime);
@@ -538,10 +522,16 @@ function animate() {
     // Update particle effects (explosions, sparks, trails)
     updateParticles(deltaTime);
     
-    // Render the scene through the post-processing composer
-    // This applies bloom and other effects automatically
-    composer.render();
+    // Update one-shot visuals (muzzle flashes, hit effects). While paused the
+    // timescale is 0, so these freeze in place rather than playing on.
+    updateEffects(deltaTime);
     
+    // Render through the post-processing chain (bloom, tone map, grade)
+    renderFrame();
+    
+    // Debug readout, toggled with F
+    updateDebugReadout();
+
     // Clear one-shot input flags at the end of each frame
     // This ensures click events are only processed once
     clearInputFlags();
@@ -576,16 +566,29 @@ function update(deltaTime) {
     // --- ENEMIES ---
     const enemyResult = updateEnemies(deltaTime);
     
-    // Check lose condition
-    if (enemyResult.reachedPlanet) {
-        // Big camera shake when enemy reaches planet!
-        shakeCamera(2, 3); // Intense shake, slow decay
-        
-        // Flash red vignette for dramatic impact
-        flashDamageVignette(500);
-        
-        handleDefeat();
-        return;
+    // --- BREACHES ---
+    // Every enemy that got through costs one point of integrity. The count
+    // matters, not just the boolean: three arriving in the same frame should
+    // cost three.
+    if (enemyResult.reachedPlanetCount > 0) {
+        if (handleBreach(enemyResult)) return;
+    }
+
+    // --- SELECTION ---
+    // Handled here rather than inside input.js so it can be gated on game
+    // state: clicking during placement is placing, not selecting.
+    if (inputState.leftClickCompleted && !isInPlacementMode()) {
+        handleSelectionClick(camera, inputState.mouseNormalized);
+    }
+
+    // Keep the open panel's live numbers current, on a timer
+    if (getSelected()) {
+        panelRefreshTimer += deltaTime;
+
+        if (panelRefreshTimer >= PANEL_REFRESH_INTERVAL) {
+            panelRefreshTimer = 0;
+            refreshPanel();
+        }
     }
     
     // --- STARBASE ---
@@ -597,41 +600,56 @@ function update(deltaTime) {
         recordShot(); // Track for accuracy
     }
     
+    // --- PLATFORMS ---
+    // Deployed platforms acquire their own targets and fire independently,
+    // returning projectile data in the same shape the starbase does
+    updatePlatforms(deltaTime).forEach(platformProjectile => {
+        createProjectile(platformProjectile);
+        recordShot(); // Track for accuracy
+    });
+    
     // --- PROJECTILES ---
     const hits = updateProjectiles(deltaTime);
     
-    // Process hits
+    // Process hits.
+    //
+    // A missile detonation produces several entries here - one for the direct
+    // hit and one per enemy caught in the blast - so nothing in this loop may
+    // assume one hit means one trigger pull.
     hits.forEach(hit => {
-        recordHit(); // Track for accuracy
-        
-        // Show damage number at hit position
+        // Only the shot's intended target counts toward accuracy. Counting
+        // splash victims would let a Missile Launcher post above 100% simply
+        // by firing into a crowd.
+        if (hit.countsForAccuracy !== false) recordHit();
+
+        creditPlatform(hit);
+
         const screenPos = worldToScreen(hit.position, camera);
         showDamageNumber(hit.damage, screenPos.x, screenPos.y, hit.destroyed);
-        
-        // Create visual effect
-        createHitEffect(hit.position);
-        
-        // Record kill if enemy was destroyed
-        if (hit.destroyed) {
-            recordKill(hit.enemy.type);
-            
-            // Create awesome particle explosion effect!
-            // Color and particle count based on enemy type
-            createEnemyDeathEffect(hit.position, hit.enemy.type);
-            
-            // Small camera shake for enemy destruction feedback
-            // Armored enemies cause bigger shake (more satisfying!)
-            const shakeAmount = hit.enemy.type === 'armored' ? 0.3 : 0.15;
-            shakeCamera(shakeAmount, 10);
-            
-            // Show credit earned
-            showFloatingText(
-                `+${hit.creditValue}`,
-                screenPos.x + 20,
-                screenPos.y - 10,
-                '#ffff00'
-            );
-        }
+
+        // Splash damage gets a smaller impact flash than the direct hit, so a
+        // detonation reads as one big event with ripples rather than five
+        // equally-weighted explosions
+        createHitEffect(hit.position, hit.splash ? 0.6 : 1);
+
+        if (!hit.destroyed) return;
+
+        recordKill(hit.enemy.type);
+        enemiesClearedThisWave++;
+        createEnemyDeathEffect(hit.position, hit.enemy.type);
+
+        // Armored enemies shake harder - the feedback should match the effort
+        const shakeAmount = hit.enemy.type === 'armored' ? 0.3 : 0.15;
+        shakeCamera(shakeAmount, 10);
+
+        applyHitStop(hit.enemy.type);
+
+        showFloatingText(
+            `+${hit.creditValue}`,
+            screenPos.x + 20,
+            screenPos.y - 10,
+            '#ffff00'
+        );
     });
     
     // --- HEALTH BARS ---
@@ -639,13 +657,158 @@ function update(deltaTime) {
     projectHealthBars(camera);
     
     // --- UI ---
-    updateHUD(currentWave);
+    updateHUD(currentWave, placementState.selectedType, {
+        cleared: enemiesClearedThisWave,
+        total: enemiesToSpawnThisWave
+    });
     
     // --- WIN CONDITION ---
     // Check if wave is complete (all enemies spawned and destroyed)
     if (enemiesSpawnedThisWave >= enemiesToSpawnThisWave && getEnemyCount() === 0) {
         completeWave();
     }
+}
+
+// ==================== BREACHES ====================
+
+/**
+ * Handle enemies that reached the planet.
+ *
+ * The old rule was that one leak ended the run instantly. That is the harshest
+ * failure state a tower defence can have, and in a game whose entire decision
+ * space is *where to put things*, it made trying a placement out cost a whole
+ * restart. Three points of integrity turn a mistake into feedback.
+ *
+ * The escalation is deliberate: each breach shakes harder and flashes redder
+ * than the last, so losing the second point feels worse than the first without
+ * the player having to read the pip row to know it.
+ *
+ * @param {object} enemyResult - From updateEnemies()
+ * @returns {boolean} True if the run ended and update() should bail out
+ */
+function handleBreach(enemyResult) {
+    planetIntegrity = Math.max(0, planetIntegrity - enemyResult.reachedPlanetCount);
+
+    // A leaked enemy has still left the board, so it counts toward wave
+    // progress. Without this the bar would stall short of full on any wave
+    // the player did not clear perfectly.
+    enemiesClearedThisWave += enemyResult.reachedPlanetCount;
+
+    updateIntegrity(planetIntegrity);
+
+    const remainingFraction = planetIntegrity / CONFIG.planet.integrity;
+    const breachPoint = enemyResult.breachPositions[0];
+
+    hitPlanetShield(breachPoint, remainingFraction);
+
+    // Feedback scales as the situation gets worse
+    const severity = 1 - remainingFraction;
+    shakeCamera(0.8 + severity * 1.6, 4);
+    flashDamageVignette(0.35 + severity * 0.35);
+
+    if (breachPoint) {
+        const screenPos = worldToScreen(breachPoint, camera);
+        showFloatingText('BREACH', screenPos.x, screenPos.y, '#ff5d5d');
+    }
+
+    if (planetIntegrity > 0) return false;
+
+    handleDefeat();
+    return true;
+}
+
+// ==================== COMBAT FEEDBACK ====================
+
+/**
+ * Attribute a hit back to the platform that fired it.
+ *
+ * Projectiles carry a `source` string of the form `platform:<id>` - the
+ * instance id, not the type, so two Laser Batteries keep separate scorecards.
+ * The starbase reports 'starbase' and is skipped here.
+ *
+ * @param {object} hit - A hit result from updateProjectiles()
+ */
+function creditPlatform(hit) {
+    if (!hit.source || !hit.source.startsWith('platform:')) return;
+
+    const id = Number(hit.source.slice('platform:'.length));
+    const platform = platforms.find(p => p.id === id);
+    if (!platform) return;
+
+    platform.damageDealt += hit.damage;
+    if (hit.destroyed) platform.kills++;
+}
+
+/**
+ * Hit-stop: freeze the world for a few dozen milliseconds on a kill.
+ *
+ * A fighting-game trick, and one of the cheapest ways to make an impact feel
+ * like it landed. The brain reads the momentary stall as resistance - the
+ * sense that the target had mass and the hit had to overcome it. Without it,
+ * enemies simply stop existing between one frame and the next.
+ *
+ * It is implemented as a timescale change rather than a sleep, so everything
+ * driven by deltaTime slows together - projectiles, particles, turret tracking.
+ * Slowing to a crawl rather than a full stop keeps explosions readable; a true
+ * freeze reads as a dropped frame.
+ *
+ * @param {string} enemyType - Bigger enemies earn a longer stall
+ */
+function applyHitStop(enemyType) {
+    const duration = enemyType === 'armored' ? 0.085 : 0.045;
+
+    // Overlapping kills extend the stall rather than restarting it, so a
+    // missile clearing five enemies at once does not lock the game up
+    hitStopRemaining = Math.max(hitStopRemaining, duration);
+    setTimescale(HIT_STOP_SCALE);
+}
+
+/**
+ * Set the simulation timescale, remembering it.
+ *
+ * THREE.Timer.getDelta() returns time already multiplied by the timescale, so
+ * there is no way to recover real elapsed time from it alone. Keeping the
+ * current scale here lets the hit-stop countdown divide it back out.
+ *
+ * @param {number} scale - 0 for paused, 1 for normal
+ */
+function setTimescale(scale) {
+    activeTimescale = scale;
+    timer.setTimescale(scale);
+}
+
+// ==================== DEBUG READOUT ====================
+
+let debugVisible = false;
+let debugElement = null;
+
+/**
+ * Draw the frame-time readout, toggled with F.
+ *
+ * Built lazily and written with textContent rather than being another element
+ * in index.html, because it is a developer tool - it should cost nothing and
+ * appear nowhere until someone asks for it.
+ */
+function updateDebugReadout() {
+    if (!debugVisible) return;
+
+    if (!debugElement) {
+        debugElement = document.createElement('div');
+        debugElement.id = 'debug-readout';
+        document.body.appendChild(debugElement);
+    }
+
+    debugElement.style.display = 'block';
+
+    const stats = getFrameStats();
+
+    debugElement.textContent = [
+        `${stats.fps} fps`,
+        `${stats.frameMs.toFixed(1)} ms`,
+        stats.tier,
+        `${enemies.length} enemies`,
+        `${renderer.info.render.calls} draws`
+    ].join('  |  ');
 }
 
 // ==================== UTILITY FUNCTIONS ====================
@@ -657,29 +820,9 @@ function update(deltaTime) {
 function onWindowResize() {
     handleResize(window.innerWidth, window.innerHeight);
     renderer.setSize(window.innerWidth, window.innerHeight);
-    
-    // Also resize the post-processing composer
-    composer.setSize(window.innerWidth, window.innerHeight);
-    
-    // Update bloom pass resolution
-    if (composer.bloomPass) {
-        composer.bloomPass.resolution.set(window.innerWidth, window.innerHeight);
-    }
+    resizePostProcessing(window.innerWidth, window.innerHeight);
 }
 
-/**
- * Shuffle an array (Fisher-Yates algorithm)
- * @param {Array} array - Array to shuffle
- * @returns {Array} Shuffled array
- */
-function shuffleArray(array) {
-    const shuffled = [...array];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled;
-}
 
 // ==================== START THE GAME ====================
 

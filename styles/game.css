@@ -1,12 +1,81 @@
-/* 
+/*
  * Solar Defense - Game Styles
- * 
- * This file controls all visual styling for the game UI.
- * The 3D graphics are handled by Three.js, but overlays like
- * the HUD, menus, and buttons are styled with CSS.
+ *
+ * The 3D scene is Three.js. Everything here is the overlay: HUD panels, the
+ * build menu, the selection panel, and the full-screen state screens.
+ *
+ * DESIGN TOKENS
+ * =============
+ * Every colour, radius, spacing step and glow in this file resolves to a custom
+ * property defined in :root. That is not decoration - the previous version had
+ * the same cyan repeated as a literal across roughly thirty rules, so changing
+ * the accent meant a find-and-replace and hoping. Re-theming this file is now
+ * one block.
+ *
+ * MOTION LIVES IN JS
+ * ==================
+ * Entrances, damage numbers, wave banners and count-ups are GSAP timelines in
+ * ui.js. This file owns static appearance and the small interaction states
+ * (:hover, :focus-visible, .selected). The two are kept apart deliberately: an
+ * earlier version animated opacity and transform from both sides at once and
+ * they fought over the same properties.
  */
 
-/* Reset and base styles */
+/* ==================== TOKENS ==================== */
+
+:root {
+    /* Surface ramp, darkest to lightest */
+    --void: #03050e;
+    --surface-1: rgba(6, 16, 32, 0.82);
+    --surface-2: rgba(10, 28, 52, 0.88);
+    --surface-3: rgba(16, 44, 78, 0.9);
+    --scrim: rgba(2, 5, 12, 0.88);
+
+    /* Accent - the HUD's cyan, from dim structure to bright signal */
+    --accent-line: rgba(72, 164, 220, 0.34);
+    --accent-dim: #4d7f9c;
+    --accent: #58c8f0;
+    --accent-bright: #8fe6ff;
+
+    /* Semantic */
+    --credit: #ffd257;
+    --good: #4ade9a;
+    --warn: #ffb547;
+    --bad: #ff5d5d;
+
+    /* Text */
+    --text: #e8f2f8;
+    --text-dim: #90a8bb;
+    --text-faint: #5f7489;
+
+    /* Glow levels. Used sparingly - if everything glows, nothing reads as lit */
+    --glow-soft: 0 0 12px rgba(88, 200, 240, 0.28);
+    --glow-strong: 0 0 22px rgba(88, 200, 240, 0.5);
+
+    /* Spacing scale */
+    --gap-1: 4px;
+    --gap-2: 8px;
+    --gap-3: 12px;
+    --gap-4: 18px;
+    --gap-5: 28px;
+
+    --radius: 6px;
+    --radius-lg: 10px;
+
+    /* Distance the HUD keeps from the viewport edge */
+    --hud-inset: 22px;
+    --rail-width: 232px;
+
+    /* Type. No webfont - the project ships zero asset files - so this leans on
+       what the platform already has. Numerics get the mono stack with tabular
+       figures: proportional digits make a counting score jitter sideways as it
+       ticks, which is distracting in peripheral vision. */
+    --font-ui: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    --font-mono: ui-monospace, 'Cascadia Mono', 'SF Mono', Consolas, monospace;
+}
+
+/* ==================== BASE ==================== */
+
 * {
     margin: 0;
     padding: 0;
@@ -14,32 +83,30 @@
 }
 
 body {
-    overflow: hidden; /* Prevent scrollbars - we want full-screen game */
-    background: #000;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    color: #fff;
+    overflow: hidden; /* Full-screen game, never a scrollbar */
+    background: var(--void);
+    font-family: var(--font-ui);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
 }
 
-/* Game container fills the entire screen */
 #game-container {
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 1; /* Behind UI elements */
+    inset: 0;
+    z-index: 1;
 }
 
-/* HUD (Heads-Up Display) - game info overlay */
+/* ==================== HUD SHELL ==================== */
+
 #hud {
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none; /* Allows clicks to pass through to the game */
+    inset: 0;
     z-index: 10;
-    display: none; /* Hidden until game starts */
+    display: none;
+
+    /* Clicks fall through to the 3D canvas. Anything interactive inside has to
+       switch pointer events back on for itself - see #hud-right. */
+    pointer-events: none;
 }
 
 #hud.active {
@@ -48,58 +115,379 @@ body {
 
 #hud-top {
     position: absolute;
-    top: 20px;
-    left: 20px;
+    top: var(--hud-inset);
+    left: var(--hud-inset);
     display: flex;
-    gap: 30px;
+    gap: var(--gap-3);
+    align-items: flex-start;
 }
 
 #hud-bottom {
     position: absolute;
-    bottom: 20px;
-    left: 20px;
+    bottom: var(--hud-inset);
+    left: var(--hud-inset);
     display: flex;
-    gap: 30px;
+    gap: var(--gap-3);
 }
 
-#hud-top > div,
-#hud-bottom > div {
-    background: rgba(0, 20, 40, 0.8);
-    padding: 10px 20px;
-    border-radius: 5px;
-    border: 1px solid rgba(0, 150, 255, 0.5);
+#hud-right {
+    position: absolute;
+    right: var(--hud-inset);
+    bottom: var(--hud-inset);
+    width: var(--rail-width);
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-3);
+
+    /* The one region of the HUD that takes clicks */
+    pointer-events: auto;
+}
+
+/* ==================== PANELS ==================== */
+
+.panel {
+    padding: var(--gap-2) var(--gap-3);
+    background: var(--surface-1);
+    border: 1px solid var(--accent-line);
+    border-radius: var(--radius);
+
+    /* Backdrop blur separates the HUD from a busy starfield without needing a
+       heavier, more opaque background that would hide the scene */
+    backdrop-filter: blur(7px);
+    -webkit-backdrop-filter: blur(7px);
+}
+
+.panel-label {
+    color: var(--text-faint);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+}
+
+.panel-value {
+    margin-top: 2px;
+    color: var(--accent-bright);
+    font-family: var(--font-mono);
+    font-size: 24px;
+    font-weight: 600;
+    line-height: 1.1;
+
+    /* Fixed-width digits, so a ticking counter does not shuffle sideways */
+    font-variant-numeric: tabular-nums;
+    text-shadow: var(--glow-soft);
+}
+
+.panel-credits .panel-value {
+    color: var(--credit);
+    text-shadow: 0 0 12px rgba(255, 210, 87, 0.3);
+}
+
+.panel-sub {
+    margin-top: var(--gap-1);
+    color: var(--text-dim);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Wave meter ---------- */
+
+#wave-panel {
+    min-width: 172px;
+}
+
+.meter {
+    height: 3px;
+    margin-top: var(--gap-2);
+    background: rgba(88, 200, 240, 0.14);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.meter-fill {
+    width: 0%;
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-dim), var(--accent-bright));
+    box-shadow: var(--glow-soft);
+
+    /* Short transition so clearing an enemy reads as a step forward rather
+       than a jump. Owned by CSS because GSAP never touches this element. */
+    transition: width 0.35s ease-out;
+}
+
+/* ---------- Integrity pips ---------- */
+
+.pips {
+    display: flex;
+    gap: 5px;
+    margin-top: var(--gap-2);
+}
+
+.pip {
+    width: 20px;
+    height: 8px;
+    background: var(--good);
+    border-radius: 2px;
+    box-shadow: 0 0 10px rgba(74, 222, 154, 0.45);
+    transition: background 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* A lost pip stays in place rather than disappearing, so the player can always
+   see how much was there to begin with */
+.pip.lost {
+    background: rgba(255, 93, 93, 0.18);
+    box-shadow: none;
+}
+
+/* Down to the last one: warn without relying on colour alone */
+.pips.critical .pip:not(.lost) {
+    background: var(--bad);
+    box-shadow: 0 0 14px rgba(255, 93, 93, 0.7);
+    animation: pip-pulse 1s ease-in-out infinite;
+}
+
+@keyframes pip-pulse {
+    50% { opacity: 0.45; }
+}
+
+/* ==================== BUILD MENU ==================== */
+
+#build-menu {
+    padding: var(--gap-3);
+    background: var(--surface-1);
+    border: 1px solid var(--accent-line);
+    border-radius: var(--radius-lg);
+    backdrop-filter: blur(7px);
+    -webkit-backdrop-filter: blur(7px);
+}
+
+#build-menu h3 {
+    margin-bottom: var(--gap-2);
+    color: var(--text-faint);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+}
+
+.build-option {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 2px var(--gap-2);
+    width: 100%;
+    margin-bottom: var(--gap-2);
+    padding: var(--gap-2) 10px;
+    text-align: left;
+    color: var(--text);
+    background: var(--surface-2);
+    border: 1px solid var(--accent-line);
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+.build-option:last-child {
+    margin-bottom: 0;
+}
+
+.build-option:hover:not(:disabled) {
+    background: var(--surface-3);
+    border-color: var(--accent);
+}
+
+.build-option:active:not(:disabled) {
+    transform: scale(0.985);
+}
+
+.build-option.selected {
+    background: var(--surface-3);
+    border-color: var(--accent-bright);
+    box-shadow: var(--glow-soft);
+}
+
+/* Greyed out rather than hidden, so the player can still see what they are
+   saving toward */
+.build-option.unaffordable {
+    opacity: 0.42;
+    cursor: not-allowed;
+}
+
+.build-option-name {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.build-option-key {
+    grid-row: span 2;
+    align-self: center;
+    min-width: 20px;
+    padding: 2px 6px;
+    color: var(--accent);
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid var(--accent-line);
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    text-align: center;
+}
+
+.build-option-cost {
+    color: var(--credit);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+}
+
+.build-option-stats {
+    grid-column: 1 / -1;
+    color: var(--text-faint);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ==================== SELECTION PANEL ==================== */
+
+#selection-panel {
+    padding: var(--gap-3);
+    background: var(--surface-1);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--glow-soft);
+    backdrop-filter: blur(7px);
+    -webkit-backdrop-filter: blur(7px);
+}
+
+.panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--gap-2);
+    color: var(--accent-bright);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+}
+
+#selection-close {
+    padding: 0 4px;
+    color: var(--text-faint);
+    background: none;
+    border: none;
+    cursor: pointer;
     font-size: 18px;
-    text-shadow: 0 0 10px rgba(0, 150, 255, 0.5);
+    line-height: 1;
 }
 
-#hud-top span,
-#hud-bottom span {
-    color: #00ffff;
-    font-weight: bold;
+#selection-close:hover {
+    color: var(--text);
 }
 
-/* Game screens (menu, victory, defeat, pause) */
+.stat-grid {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 3px var(--gap-2);
+    margin-bottom: var(--gap-3);
+    font-size: 11px;
+}
+
+.stat-grid dt {
+    color: var(--text-faint);
+}
+
+.stat-grid dd {
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+/* An upgraded stat reads green, so the effect of spending is visible at a
+   glance without having to remember the base number */
+.stat-grid dd.upgraded {
+    color: var(--good);
+}
+
+.upgrade-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-1);
+    margin-bottom: var(--gap-2);
+}
+
+.upgrade-button {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 9px;
+    color: var(--text);
+    background: var(--surface-2);
+    border: 1px solid var(--accent-line);
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 11px;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.upgrade-button:hover:not(:disabled) {
+    background: var(--surface-3);
+    border-color: var(--accent);
+}
+
+.upgrade-button:disabled {
+    opacity: 0.42;
+    cursor: not-allowed;
+}
+
+.upgrade-cost {
+    color: var(--credit);
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+}
+
+.upgrade-maxed {
+    color: var(--text-faint);
+}
+
+.sell-button {
+    width: 100%;
+    padding: 7px;
+    color: var(--warn);
+    background: rgba(255, 181, 71, 0.08);
+    border: 1px solid rgba(255, 181, 71, 0.4);
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    transition: background 0.15s ease;
+}
+
+.sell-button:hover {
+    background: rgba(255, 181, 71, 0.18);
+}
+
+/* ==================== STATE SCREENS ==================== */
+
 #game-screens {
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
+    inset: 0;
     z-index: 100;
     pointer-events: none;
 }
 
 .screen {
     position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    display: none; /* Hidden by default */
+    inset: 0;
+    display: none;
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    background: rgba(0, 0, 0, 0.85);
+    padding: var(--gap-5);
+    text-align: center;
+    background: var(--scrim);
     pointer-events: auto;
 }
 
@@ -108,168 +496,393 @@ body {
 }
 
 .screen h1 {
-    font-size: 64px;
-    margin-bottom: 20px;
-    text-shadow: 0 0 20px rgba(0, 150, 255, 0.8);
-    color: #00ffff;
+    margin-bottom: var(--gap-4);
+    color: var(--accent-bright);
+    font-size: clamp(34px, 7vw, 62px);
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    text-shadow: var(--glow-strong);
 }
 
 .screen p {
-    font-size: 24px;
-    margin-bottom: 15px;
-    color: #aaa;
+    max-width: 30rem;
+    margin-bottom: var(--gap-3);
+    color: var(--text-dim);
+    font-size: clamp(14px, 2.2vw, 18px);
+    line-height: 1.55;
+}
+
+.screen-lede {
+    color: var(--text) !important;
+}
+
+.screen-hint {
+    color: var(--text-faint) !important;
+    font-size: 13px !important;
+}
+
+.screen-score {
+    color: var(--text) !important;
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+}
+
+.screen-record {
+    margin-top: var(--gap-2);
+    color: var(--credit) !important;
+    font-family: var(--font-mono);
+    font-size: 13px !important;
+}
+
+.screen kbd {
+    display: inline-block;
+    min-width: 20px;
+    margin: 0 1px;
+    padding: 1px 5px;
+    color: var(--accent);
+    background: rgba(0, 0, 0, 0.45);
+    border: 1px solid var(--accent-line);
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 11px;
 }
 
 .screen button {
-    margin-top: 20px;
-    padding: 15px 40px;
-    font-size: 20px;
-    background: linear-gradient(180deg, #0066aa, #003366);
-    color: #fff;
-    border: 2px solid #00aaff;
-    border-radius: 8px;
+    min-width: 210px;
+    margin-top: var(--gap-3);
+    padding: 13px 38px;
+    color: var(--void);
+    background: linear-gradient(180deg, var(--accent-bright), var(--accent));
+    border: none;
+    border-radius: var(--radius);
     cursor: pointer;
-    transition: all 0.3s ease;
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 1.6px;
     text-transform: uppercase;
-    letter-spacing: 2px;
+    transition: box-shadow 0.25s ease, transform 0.12s ease;
 }
 
 .screen button:hover {
-    background: linear-gradient(180deg, #0088cc, #004488);
-    box-shadow: 0 0 20px rgba(0, 150, 255, 0.6);
-    transform: scale(1.05);
+    box-shadow: var(--glow-strong);
+    transform: translateY(-1px);
 }
 
 .screen button:active {
-    transform: scale(0.98);
+    transform: translateY(0) scale(0.99);
 }
 
-/* Victory screen specific */
+/* The lower-priority action on a screen with two. Same size and position, far
+   less visual weight, so the primary choice is obvious without being the only
+   one that looks clickable. */
+.screen button.secondary {
+    margin-top: var(--gap-2);
+    color: var(--text-dim);
+    background: none;
+    border: 1px solid var(--accent-line);
+    font-weight: 600;
+}
+
+.screen button.secondary:hover {
+    color: var(--text);
+    border-color: var(--accent);
+    box-shadow: none;
+}
+
+/* Keyboard users need to see where they are. The default outline is invisible
+   against a dark scrim. */
+.screen button:focus-visible,
+.build-option:focus-visible,
+.upgrade-button:focus-visible,
+.sell-button:focus-visible {
+    outline: 2px solid var(--accent-bright);
+    outline-offset: 2px;
+}
+
 #victory-screen h1 {
-    color: #00ff88;
-    text-shadow: 0 0 20px rgba(0, 255, 136, 0.8);
+    color: var(--good);
+    text-shadow: 0 0 22px rgba(74, 222, 154, 0.5);
 }
 
-/* Defeat screen specific */
 #defeat-screen h1 {
-    color: #ff4444;
-    text-shadow: 0 0 20px rgba(255, 68, 68, 0.8);
+    color: var(--bad);
+    text-shadow: 0 0 22px rgba(255, 93, 93, 0.5);
 }
 
-/* Crosshair/targeting reticle (optional) */
-#crosshair {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 30px;
-    height: 30px;
-    border: 2px solid rgba(0, 255, 255, 0.6);
-    border-radius: 50%;
-    pointer-events: none;
-    z-index: 50;
-    display: none;
-}
+/* ==================== WORLD-ANCHORED OVERLAYS ==================== */
 
-#crosshair.active {
-    display: block;
-}
-
-#crosshair::before,
-#crosshair::after {
-    content: '';
-    position: absolute;
-    background: rgba(0, 255, 255, 0.6);
-}
-
-#crosshair::before {
-    width: 10px;
-    height: 2px;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-}
-
-#crosshair::after {
-    width: 2px;
-    height: 10px;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-}
-
-/* Damage numbers (floating text when hitting enemies) */
+/* Damage numbers and floating text.
+ *
+ * Motion is GSAP's (ui.js). These rules own only the static styling - a CSS
+ * @keyframes driving opacity and transform alongside a GSAP tween on the same
+ * element left the two fighting. */
 .damage-number {
     position: fixed;
-    color: #ffff00;
-    font-size: 20px;
-    font-weight: bold;
-    text-shadow: 0 0 5px #ff8800;
-    pointer-events: none;
     z-index: 200;
-    animation: floatUp 1s ease-out forwards;
+    color: var(--credit);
+    font-family: var(--font-mono);
+    font-size: 19px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 6px rgba(255, 136, 0, 0.9);
+    pointer-events: none;
 }
 
-@keyframes floatUp {
-    0% {
-        opacity: 1;
-        transform: translateY(0);
-    }
-    100% {
-        opacity: 0;
-        transform: translateY(-50px);
-    }
+.floating-text {
+    position: fixed;
+    z-index: 200;
+    font-family: var(--font-mono);
+    font-size: 15px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
 }
 
-/* Health bar styles (for enemies) */
+/* Enemy health bars, positioned each frame by projectHealthBars() */
 .health-bar-container {
     position: absolute;
-    width: 50px;
-    height: 6px;
-    background: rgba(0, 0, 0, 0.7);
-    border: 1px solid #333;
+    width: 46px;
+    height: 5px;
+    background: rgba(0, 0, 0, 0.68);
+    border: 1px solid rgba(0, 0, 0, 0.8);
     border-radius: 3px;
     overflow: hidden;
+    pointer-events: none;
 }
 
 .health-bar {
     height: 100%;
-    background: linear-gradient(90deg, #ff0000, #ff4444);
-    transition: width 0.2s ease;
+    background: linear-gradient(90deg, #d62828, #ff5d5d);
+    transition: width 0.18s ease;
 }
 
 .health-bar.high {
-    background: linear-gradient(90deg, #00ff00, #44ff44);
+    background: linear-gradient(90deg, #2fa866, var(--good));
 }
 
 .health-bar.medium {
-    background: linear-gradient(90deg, #ffff00, #ffff44);
+    background: linear-gradient(90deg, #d99a20, var(--warn));
 }
 
-/* Tutorial tooltips */
+/* ==================== WAVE BANNER AND SUMMARY ==================== */
+
+/* Both are transient nodes created and destroyed by ui.js. They used to be
+   styled with inline cssText strings inside the JS, which meant restyling them
+   was a hunt through string literals. */
+
+.wave-banner {
+    position: fixed;
+    top: 32%;
+    left: 50%;
+    z-index: 150;
+    color: var(--accent-bright);
+    font-size: clamp(40px, 8vw, 76px);
+    font-weight: 800;
+    letter-spacing: 5px;
+    text-transform: uppercase;
+    text-shadow: var(--glow-strong);
+    pointer-events: none;
+    white-space: nowrap;
+}
+
+.wave-banner-sub {
+    display: block;
+    margin-top: var(--gap-2);
+    color: var(--text-dim);
+    font-size: 15px;
+    font-weight: 500;
+    letter-spacing: 3px;
+}
+
+.wave-summary {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    z-index: 150;
+    min-width: 300px;
+    padding: var(--gap-4) var(--gap-5);
+    background: var(--surface-1);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--glow-strong);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    pointer-events: none;
+}
+
+.wave-summary h2 {
+    margin-bottom: var(--gap-3);
+    color: var(--accent-bright);
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: 2.4px;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.wave-summary-row {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--gap-5);
+    padding: 4px 0;
+    font-size: 13px;
+}
+
+.wave-summary-row span:first-child {
+    color: var(--text-faint);
+}
+
+.wave-summary-row span:last-child {
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+}
+
+.wave-summary-row.highlight span:last-child {
+    color: var(--credit);
+}
+
+/* ==================== TOOLTIPS ==================== */
+
+/* First-run hints. The stylesheet has carried these rules since Sprint 1 while
+   nothing ever called showTooltip(); they are finally in use. */
 .tooltip {
     position: fixed;
-    background: rgba(0, 20, 40, 0.95);
-    padding: 15px 20px;
-    border-radius: 8px;
-    border: 1px solid #00aaff;
-    max-width: 300px;
     z-index: 300;
-    animation: fadeIn 0.3s ease;
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
+    max-width: 280px;
+    padding: var(--gap-3) var(--gap-4);
+    background: var(--surface-2);
+    border: 1px solid var(--accent);
+    border-left: 3px solid var(--accent-bright);
+    border-radius: var(--radius);
+    box-shadow: var(--glow-soft);
+    backdrop-filter: blur(7px);
+    -webkit-backdrop-filter: blur(7px);
 }
 
 .tooltip h3 {
-    color: #00ffff;
-    margin-bottom: 10px;
+    margin-bottom: var(--gap-1);
+    color: var(--accent-bright);
+    font-size: 13px;
+    letter-spacing: 0.4px;
 }
 
 .tooltip p {
-    color: #ccc;
-    font-size: 14px;
+    color: var(--text-dim);
+    font-size: 12px;
     line-height: 1.5;
+}
+
+/* ==================== DEBUG ==================== */
+
+/* Frame readout, toggled with F. Deliberately plain - it is a tool, not part
+   of the game's look. */
+#debug-readout {
+    position: fixed;
+    top: var(--hud-inset);
+    right: var(--hud-inset);
+    z-index: 400;
+    padding: 6px 10px;
+    background: rgba(0, 0, 0, 0.72);
+    border: 1px solid var(--accent-line);
+    border-radius: var(--radius);
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+}
+
+/* ==================== RESPONSIVE ==================== */
+
+/*
+ * The previous stylesheet had no media queries at all and a fixed 64px heading,
+ * so anything narrower than a desktop window overlapped or overflowed.
+ *
+ * The layout degrades in two steps. At laptop width the rail narrows and the
+ * insets tighten. At phone width the HUD stops being a four-corner layout -
+ * corners stop working once the panels are a meaningful fraction of the screen -
+ * and becomes stacked rows, with the build menu laid out horizontally along the
+ * bottom where a thumb can reach it.
+ */
+
+@media (max-width: 1024px) {
+    :root {
+        --hud-inset: 14px;
+        --rail-width: 200px;
+    }
+
+    .panel-value {
+        font-size: 20px;
+    }
+
+    #wave-panel {
+        min-width: 150px;
+    }
+}
+
+@media (max-width: 700px) {
+    :root {
+        --hud-inset: 10px;
+        --rail-width: auto;
+    }
+
+    #hud-top {
+        right: var(--hud-inset);
+        flex-wrap: wrap;
+    }
+
+    #hud-top .panel {
+        flex: 1 1 auto;
+    }
+
+    /* The bottom-left readouts and the right rail would collide at this width,
+       so the readouts move up above the rail and the rail takes the whole
+       bottom edge */
+    #hud-bottom {
+        bottom: calc(var(--hud-inset) + 132px);
+        right: var(--hud-inset);
+    }
+
+    #hud-right {
+        left: var(--hud-inset);
+        right: var(--hud-inset);
+        width: auto;
+    }
+
+    #build-menu {
+        display: flex;
+        gap: var(--gap-2);
+    }
+
+    #build-menu h3 {
+        display: none; /* The buttons are self-explanatory; the header is not */
+    }
+
+    .build-option {
+        margin-bottom: 0;
+        flex: 1 1 0;
+    }
+
+    .build-option-stats {
+        display: none;
+    }
+
+    .screen button {
+        min-width: min(280px, 80vw);
+    }
+}
+
+/* Anyone who has asked their system to reduce motion should not be given a
+   pulsing critical-damage indicator. GSAP timelines check the same preference
+   in ui.js. */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+    }
 }

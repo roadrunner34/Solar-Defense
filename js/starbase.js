@@ -17,15 +17,18 @@
 
 import * as THREE from 'three';
 import { scene } from './scene.js';
+import { createHullMaterial } from './materials.js';
 import { CONFIG } from './config.js';
 import { getClosestEnemy } from './enemy.js';
 
-// Import smooth animation utilities
-// dampAngle provides frame-rate independent smooth rotation
-import { dampAngle } from './mathUtils.js';
+// Shared turret aiming, used by the starbase and every platform
+import { updateTurretAim } from './turret.js';
 
 // Import particle effects for muzzle sparks
 import { createMuzzleSparks } from './particles.js';
+
+// Short-lived visuals are stepped by the game loop, not their own rAF loop
+import { addEffect } from './effects.js';
 
 export let starbase = null;
 
@@ -81,7 +84,7 @@ export function createStarbase() {
     
     // Bottom layer - wider foundation with subtle glow
     const baseBottomGeometry = new THREE.CylinderGeometry(4, 4.5, 0.4, 8);
-    const baseBottomMaterial = new THREE.MeshPhongMaterial({
+    const baseBottomMaterial = createHullMaterial({
         color: 0x4a4a4a,
         emissive: new THREE.Color(0.03, 0.03, 0.03),
         flatShading: true
@@ -94,7 +97,7 @@ export function createStarbase() {
     
     // Middle layer - main hexagonal platform
     const baseMiddleGeometry = new THREE.CylinderGeometry(3.2, 3.8, 0.6, 6);
-    const baseMiddleMaterial = new THREE.MeshPhongMaterial({
+    const baseMiddleMaterial = createHullMaterial({
         color: 0x5a5a5a,
         emissive: new THREE.Color(0.05, 0.05, 0.05),
         flatShading: true,
@@ -108,7 +111,7 @@ export function createStarbase() {
     
     // Top layer - smaller platform for turret mount
     const baseTopGeometry = new THREE.CylinderGeometry(2.5, 3, 0.5, 6);
-    const baseTopMaterial = new THREE.MeshPhongMaterial({
+    const baseTopMaterial = createHullMaterial({
         color: 0x6a6a6a,
         emissive: new THREE.Color(0.06, 0.06, 0.06),
         flatShading: true,
@@ -126,7 +129,7 @@ export function createStarbase() {
         
         // Vertical support pillar
         const supportGeometry = new THREE.CylinderGeometry(0.15, 0.2, 1.2, 6);
-        const supportMaterial = new THREE.MeshPhongMaterial({
+        const supportMaterial = createHullMaterial({
             color: 0x6a6a6a,
             emissive: new THREE.Color(0.03, 0.03, 0.03)
         });
@@ -155,7 +158,7 @@ export function createStarbase() {
     
     // Main turret body - octagonal for more interesting shape
     const turretGeometry = new THREE.CylinderGeometry(1.3, 1.5, 1.2, 8);
-    const turretMaterial = new THREE.MeshPhongMaterial({
+    const turretMaterial = createHullMaterial({
         color: 0x5a5a5a,
         emissive: new THREE.Color(0.05, 0.05, 0.05),
         shininess: 50
@@ -165,7 +168,7 @@ export function createStarbase() {
     
     // Turret top cap - slightly smaller
     const turretCapGeometry = new THREE.CylinderGeometry(1.1, 1.3, 0.3, 8);
-    const turretCapMaterial = new THREE.MeshPhongMaterial({
+    const turretCapMaterial = createHullMaterial({
         color: 0x6a6a6a,
         emissive: new THREE.Color(0.06, 0.06, 0.06),
         shininess: 60
@@ -181,7 +184,7 @@ export function createStarbase() {
         
         // Panel recess (darker inset)
         const panelGeometry = new THREE.BoxGeometry(0.6, 0.5, 0.1);
-        const panelMaterial = new THREE.MeshPhongMaterial({
+        const panelMaterial = createHullMaterial({
             color: 0x3a3a3a,
             emissive: new THREE.Color(0.01, 0.01, 0.01)
         });
@@ -212,7 +215,7 @@ export function createStarbase() {
     
     // Main barrel - longer and more detailed
     const barrelGeometry = new THREE.CylinderGeometry(0.25, 0.35, 3.5, 12);
-    const barrelMaterial = new THREE.MeshPhongMaterial({
+    const barrelMaterial = createHullMaterial({
         color: 0x4a4a4a,
         emissive: new THREE.Color(0.03, 0.03, 0.03),
         shininess: 70
@@ -224,7 +227,7 @@ export function createStarbase() {
     
     // Barrel base mount (where it connects to turret)
     const barrelMountGeometry = new THREE.CylinderGeometry(0.5, 0.4, 0.6, 8);
-    const barrelMountMaterial = new THREE.MeshPhongMaterial({
+    const barrelMountMaterial = createHullMaterial({
         color: 0x5a5a5a,
         emissive: new THREE.Color(0.04, 0.04, 0.04)
     });
@@ -268,7 +271,7 @@ export function createStarbase() {
     // === MULTIPLE ANTENNAS ===
     // Main communication antenna (taller)
     const mainAntennaGeometry = new THREE.CylinderGeometry(0.04, 0.06, 2, 8);
-    const antennaMaterial = new THREE.MeshPhongMaterial({
+    const antennaMaterial = createHullMaterial({
         color: 0x6a6a6a,
         emissive: new THREE.Color(0.03, 0.03, 0.03)
     });
@@ -278,7 +281,7 @@ export function createStarbase() {
     
     // Main antenna tip - very subtle, non-glowing
     const mainTipGeometry = new THREE.SphereGeometry(0.12, 8, 8);
-    const mainTipMaterial = new THREE.MeshPhongMaterial({
+    const mainTipMaterial = createHullMaterial({
         color: 0x8a6a5a, // Muted brown/orange, no glow
         emissive: new THREE.Color(0.01, 0.01, 0.01)
     });
@@ -294,7 +297,7 @@ export function createStarbase() {
     
     // Secondary antenna tip - very subtle, non-glowing
     const secondTipGeometry = new THREE.SphereGeometry(0.08, 8, 8);
-    const secondTipMaterial = new THREE.MeshPhongMaterial({
+    const secondTipMaterial = createHullMaterial({
         color: 0x6a7a6a, // Muted gray-green, no glow
         emissive: new THREE.Color(0.01, 0.01, 0.01)
     });
@@ -305,7 +308,7 @@ export function createStarbase() {
     // === ENERGY CONDUITS ===
     // Non-glowing structural pipes
     const conduitGeometry = new THREE.CylinderGeometry(0.06, 0.06, 1.5, 8);
-    const conduitMaterial = new THREE.MeshPhongMaterial({
+    const conduitMaterial = createHullMaterial({
         color: 0x5a5a5a, // Neutral gray, no glow
         emissive: new THREE.Color(0.01, 0.01, 0.01)
     });
@@ -397,39 +400,18 @@ export function updateStarbase(deltaTime) {
     currentTarget = getClosestEnemy(starbasePosition, stats.range);
     
     // === AUTO-AIM ===
-    // If we have a target, rotate to face it
+    // If we have a target, rotate to face it. Platforms use the same helper,
+    // so the starbase and every platform track targets identically.
     let isAimed = false;
     
     if (currentTarget && currentTarget.alive) {
-        // Calculate direction to target
-        const targetPosition = currentTarget.mesh.position;
-        const directionToTarget = new THREE.Vector3()
-            .subVectors(targetPosition, starbasePosition);
-        
-        // Calculate the angle we need to face (on the Y axis / horizontal plane)
-        // atan2 gives us the angle from the Z-axis to our target
-        const targetAngle = Math.atan2(directionToTarget.x, directionToTarget.z);
-        
-        // === SMOOTH ROTATION WITH DAMPING ===
-        // Use dampAngle for buttery-smooth, frame-rate independent rotation!
-        // 
-        // The 'lambda' parameter (12 here) controls how fast the turret tracks:
-        // - Lower values (5-8): Slow, dramatic tracking
-        // - Medium values (10-15): Responsive but smooth
-        // - Higher values (20+): Snappy, almost instant
-        //
-        // dampAngle automatically handles the angle wrapping problem (where
-        // -180° and 180° are the same angle) and always takes the shortest path.
-        const lambda = stats.rotationSpeed * 3; // Scale rotation speed to lambda
-        turret.rotation.y = dampAngle(turret.rotation.y, targetAngle, lambda, deltaTime);
-        
-        // Calculate remaining angle difference for aim check
-        let angleDiff = targetAngle - turret.rotation.y;
-        while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-        while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-        
-        // Consider "aimed" if we're within 5 degrees (0.087 radians)
-        isAimed = Math.abs(angleDiff) < 0.087;
+        isAimed = updateTurretAim(
+            turret,
+            starbasePosition,
+            currentTarget.mesh.position,
+            stats.rotationSpeed,
+            deltaTime
+        );
     }
     
     // === FIRING ===
@@ -482,6 +464,8 @@ function fireProjectile(turret, target) {
         direction: direction,
         damage: stats.damage,
         speed: stats.projectileSpeed,
+        projectileType: 'laser',
+        target,
         source: 'starbase'
     };
 }
@@ -519,34 +503,39 @@ function createMuzzleFlash(position) {
     ring.position.copy(position);
     scene.add(ring);
     
-    // Animate and remove the flash
+    // Animate and remove the flash.
+    //
+    // Driven by the game loop rather than its own requestAnimationFrame, so it
+    // pauses with the game. Steps are scaled against a 60fps baseline, which
+    // keeps the look identical at 60fps while stopping the effect from playing
+    // faster on a high-refresh display.
     let opacity = 1;
     let ringOpacity = 0.8;
     
-    const animate = () => {
-        opacity -= 0.12;
-        ringOpacity -= 0.1;
+    addEffect((deltaTime) => {
+        const step = Math.min(deltaTime, 0.5) * 60;
+        
+        opacity -= 0.12 * step;
+        ringOpacity -= 0.1 * step;
         
         // Flash expands and fades
-        flash.scale.multiplyScalar(1.25);
+        flash.scale.multiplyScalar(Math.pow(1.25, step));
         flashMaterial.opacity = Math.max(0, opacity);
         
         // Ring expands slower
-        ring.scale.multiplyScalar(1.15);
+        ring.scale.multiplyScalar(Math.pow(1.15, step));
         ringMaterial.opacity = Math.max(0, ringOpacity);
         
-        if (opacity > 0 || ringOpacity > 0) {
-            requestAnimationFrame(animate);
-        } else {
-            scene.remove(flash);
-            scene.remove(ring);
-            flashGeometry.dispose();
-            flashMaterial.dispose();
-            ringGeometry.dispose();
-            ringMaterial.dispose();
-        }
-    };
-    requestAnimationFrame(animate);
+        if (opacity > 0 || ringOpacity > 0) return true;
+        
+        scene.remove(flash);
+        scene.remove(ring);
+        flashGeometry.dispose();
+        flashMaterial.dispose();
+        ringGeometry.dispose();
+        ringMaterial.dispose();
+        return false;
+    });
 }
 
 /**
@@ -594,6 +583,7 @@ export function resetStarbaseStats() {
         starbase.userData.stats = stats;
     }
     currentTarget = null;
+    timeSinceLastShot = 0; // Start each game on a fresh cooldown
     animationTime = 0; // Reset animation time for visual effects
 }
 
