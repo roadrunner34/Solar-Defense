@@ -1,149 +1,150 @@
 # Solar Defense
 
-A browser-based tower defense game set in space! Defend your planet from waves of enemies using your starbase's weapons.
+A browser-based tower defense game set in space. Defend your planet from waves of enemies using your starbase and a network of deployable weapon platforms.
+
+Built with Three.js, no framework.
+
+## Getting Started
+
+```bash
+npm install
+npm run dev
+```
+
+Then open the URL Vite prints (by default <http://localhost:5173>).
+
+| Command | What it does |
+|---|---|
+| `npm run dev` | Start the dev server with hot reload |
+| `npm run build` | Bundle to `dist/` for deployment |
+| `npm run preview` | Serve the production bundle locally |
+| `npm test` | Run the test suite once |
+| `npm run test:watch` | Re-run tests on change |
 
 ## How to Play
 
-### Running the Game
+Click **Start Game**. Your starbase automatically targets and fires at the closest enemy in range — you don't aim it. Your job is to spend credits on weapon platforms and place them well.
 
-**Option 1: Using a Local Server (Recommended)**
-
-Because the game uses ES6 modules, you need to run it from a local server. Here are some easy options:
-
-```bash
-# Using Python 3
-python -m http.server 8000
-
-# Using Node.js (if you have npx)
-npx serve
-
-# Using PHP
-php -S localhost:8000
-```
-
-Then open `http://localhost:8000` in your browser.
-
-**Option 2: Using VS Code Live Server**
-
-If you have VS Code with the "Live Server" extension:
-1. Right-click on `index.html`
-2. Select "Open with Live Server"
+Survive all 5 waves to win. A single enemy reaching the planet ends the run.
 
 ### Controls
 
-- **Escape**: Pause game
-- **Mouse**: Rotate camera view (drag to orbit)
-- **Scroll**: Zoom in/out
+| Input | Action |
+|---|---|
+| **Click a build menu button** | Enter placement mode for that platform |
+| **`1`, `2`** | Shortcuts for the build menu, in listed order |
+| **Move mouse** | Position the placement ghost |
+| **Left click** | Place the platform (if the spot is valid and you can afford it) |
+| **Right click** or **`Escape`** | Cancel placement |
+| **`Escape`** | Pause (when not placing) |
+| **Drag** | Orbit the camera |
+| **Scroll** | Zoom in/out |
 
-### Gameplay
+While placing, the ghost turns **green** where a platform can go and **red** where it can't, with a circle showing the weapon's range. If placement fails, the reason appears at your cursor.
 
-1. Click "Start Game" to begin
-2. Your starbase **automatically targets and fires** at the closest enemy
-3. Watch as your defenses engage incoming enemies
-4. Survive all 5 waves to win!
+### Weapon Platforms
 
-**Note:** This is a tower defense game - weapons aim and fire automatically! In later sprints, you'll be able to place additional weapon platforms strategically.
+Platforms are bought with credits and defend the spot you put them. They acquire and fire at targets on their own.
+
+| Platform | Cost | Damage | Range | Fire Rate | Turn Speed |
+|---|---|---|---|---|---|
+| Laser Battery | 50 | 20 | 80 | 1.2/sec | Fast |
+| Missile Launcher | 100 | 40 | 100 | 0.8/sec | Slow |
+
+The two are deliberately opposed. The Laser Battery is cheap and quick to track, so it handles fast enemies. The Missile Launcher hits roughly twice as hard at longer range, but turns slowly enough that fast enemies can outrun its aim — which is what makes mixing the two worthwhile.
+
+Placement rules: at least 15 units from the planet, no more than 70 units out, and at least 10 units from another platform.
 
 ### Enemy Types
 
-| Enemy | Color | Health | Speed | Worth |
-|-------|-------|--------|-------|-------|
-| Basic | Red | 100 | Normal | 10 credits |
-| Fast | Yellow | 60 | Fast | 15 credits |
-| Armored | Purple | 200 | Slow | 25 credits |
+| Enemy | Shape | Colour | Health | Speed | Armour | Worth |
+|---|---|---|---|---|---|---|
+| Basic | Octahedron | Red | 100 | 5/sec | 0 | 10 credits |
+| Fast | Tetrahedron | Yellow | 60 | 10/sec | 0 | 15 credits |
+| Armored | Dodecahedron | Purple | 200 | 3/sec | 10 | 25 credits |
+
+Armour subtracts from each incoming hit, so many weak shots fare badly against Armored enemies — a Laser Battery's 20 damage lands as 10, while a Missile Launcher's 40 lands as 30.
+
+Enemies approach along one of three curved paths, chosen at random. All three take the same world speed, so an enemy's path doesn't change how fast it travels.
 
 ## Project Structure
 
 ```
 Solar-Defense/
-├── index.html          # Main HTML entry point
-├── README.md           # This file
+├── index.html            # Entry point and HUD markup
+├── vite.config.js        # Dev server, build, and test config
 ├── styles/
-│   └── game.css        # Game styling
-└── js/
-    ├── main.js         # Game initialization, loop, and post-processing
-    ├── config.js       # Game balance settings
-    ├── scene.js        # Three.js scene setup with lensflare
-    ├── camera.js       # Camera controls with shake effects
-    ├── input.js        # Input handling
-    ├── path.js         # Enemy path system
-    ├── enemy.js        # Enemy management
-    ├── starbase.js     # Player starbase with smooth targeting
-    ├── projectile.js   # Projectile system with bloom effects
-    ├── particles.js    # GPU particle system for explosions
-    ├── mathUtils.js    # Animation utilities (damp, lerp, easing)
-    ├── economy.js      # Credits and scoring
-    └── ui.js           # User interface with GSAP animations
+│   └── game.css          # HUD, screens, and build menu styling
+├── js/
+│   ├── main.js           # Initialization, game loop, wave progression, post-processing
+│   ├── config.js         # All game balance values
+│   ├── scene.js          # Sun, planet, asteroids, starfield, lighting
+│   ├── camera.js         # Orbit controls and camera shake
+│   ├── input.js          # Mouse and keyboard, placement input
+│   ├── path.js           # Enemy approach paths (Catmull-Rom splines)
+│   ├── enemy.js          # Enemy spawning, movement, damage, health bars
+│   ├── starbase.js       # The player's central auto-targeting weapon
+│   ├── platform.js       # Deployable platforms: placement, combat, economy
+│   ├── turret.js         # Aiming logic shared by the starbase and platforms
+│   ├── projectile.js     # Projectile movement and collision
+│   ├── particles.js      # Pooled GPU particle systems
+│   ├── effects.js        # Short-lived visuals, stepped by the game loop
+│   ├── economy.js        # Credits, score, accuracy
+│   ├── mathUtils.js      # Damping, easing, interpolation
+│   └── ui.js             # HUD, screens, build menu, floating text
+└── tests/                # Vitest suite (see tests/README.md)
 ```
 
 ## Development
 
+### Testing
+
+```bash
+npm test
+```
+
+153 tests across 10 files. Most run in Vitest's `node` environment; files needing a DOM opt in with a `// @vitest-environment jsdom` docblock. See [tests/README.md](tests/README.md).
+
 ### Sprint Progress
 
 - [x] **Sprint 0**: Project foundation and basic 3D scene
-- [x] **Sprint 1**: MVP - Core gameplay loop with starbase and enemies
-- [ ] **Sprint 2**: Deployable platform system
-- [ ] **Sprint 3**: Upgrade system and economy
+- [x] **Sprint 1**: MVP — core gameplay loop with starbase and enemies
+- [x] **Sprint 2**: Deployable platform system — placement, combat, economy, build menu
+- [ ] **Sprint 3**: Upgrade system and economy depth
 - [ ] **Sprint 4**: Level/wave system and difficulty scaling
 - [ ] **Sprint 5**: Polish, effects, and advanced features
 
-### Technologies Used
+Sprint 2's remaining work is tracked in `.cursor/plans/sprint_2_atomized_tasks_95aa8dfb.plan.md`: clicking an existing platform to select and sell it (`sellPlatform()` exists and is tested, but nothing in the UI calls it yet), missile-type projectiles with their own visuals, per-platform statistics, and a formal performance pass with 10+ platforms.
 
-- **Three.js**: 3D graphics rendering
-- **GSAP**: Professional animation library for UI transitions
-- **HTML5 Canvas**: Rendering surface
-- **ES6 Modules**: Modern JavaScript organization
-- **CSS3**: UI styling and animations
+### Technologies
 
-## What's New in Sprint 1
+- **Three.js** (0.186) — 3D rendering
+- **GSAP** — UI animation
+- **Vite** — dev server and bundler
+- **Vitest** — test runner
+- **ES Modules**, **CSS3**
 
-- Complete 3D solar system scene with sun, planets, and asteroid field
-- **Auto-targeting starbase** - automatically finds and shoots closest enemy
-- Three enemy types with different behaviors (basic, fast, armored)
-- Smooth enemy movement along curved paths
-- Collision detection and damage system
-- Health bars for enemies
-- Credits and scoring system
-- Win/lose conditions
-- Wave progression (5 waves)
-- Damage number popups
-- Visual feedback (muzzle flash, hit effects)
+## Visual Effects
 
-## Visual Enhancements
+### Post-Processing
 
-The game features professional visual effects powered by modern Three.js libraries:
+Rendering runs through an `EffectComposer` chain: scene render → bloom → a custom vignette and colour-grading shader → output pass. Bright objects use HDR colour values above 1.0 so the bloom pass picks them up, which is what makes lasers, explosions and the sun glow. Tone mapping is ACES Filmic.
 
-### Post-Processing Effects
-- **Bloom/Glow**: Bright objects like the sun, projectiles, and explosions emit a beautiful glow
-- **Vignette**: Subtle darkening at screen edges for a cinematic look
-- **Color Grading**: Enhanced contrast and saturation with cool space tones
+### Particles
 
-### Particle Effects
-- **GPU Particle System**: Efficient shader-based particles for thousands of simultaneous particles
-- **Enemy Explosions**: Color-coded particle bursts when enemies are destroyed
-- **Muzzle Sparks**: Sparks spray when weapons fire
-- **Trail Effects**: Particle trails for projectiles
+Explosions and muzzle sparks come from pooled `THREE.Points` systems with a custom shader, giving per-particle size, alpha and colour. Enemy deaths are colour-coded by type, and simultaneous explosions keep their own colours.
 
-### Animation & Feedback
-- **Lensflare**: Cinematic lens flare on the sun
-- **Camera Shake**: Impactful screen shake on explosions and damage
-- **GSAP UI Animations**: Smooth, professional screen transitions and popups
-- **Smooth Targeting**: Frame-rate independent turret rotation using damping
-- **Animated Numbers**: Stats count up satisfyingly in wave summaries
+### Other
 
-### HDR-Style Rendering
-- **Emissive Materials**: Objects use HDR color values (>1.0) for enhanced glow
-- **ACES Filmic Tone Mapping**: Cinematic color processing
+- Lens flare on the sun
+- Camera shake on explosions and on losing the planet, applied without disturbing your camera orbit
+- GSAP screen transitions, damage numbers and wave summaries with counting stats
+- Frame-rate independent turret tracking and effect animation
 
 ## Browser Support
 
-Works best in modern browsers that support:
-- WebGL 2.0
-- ES6 Modules
-- CSS Grid/Flexbox
-
-Tested on: Chrome, Firefox, Edge
+Needs WebGL 2.0 and ES module support. Tested on Chrome, Firefox and Edge.
 
 ## License
 
-MIT License - Feel free to use and modify!
+MIT — feel free to use and modify.
