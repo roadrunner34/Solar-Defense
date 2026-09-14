@@ -1055,6 +1055,35 @@ export function showWaveAnnouncement(waveNumber, subtitle = '') {
  *
  * @param {object} summary - From getWaveSummary(), merged with awardWaveBonus()
  */
+/**
+ * Build the "next wave" footer for the wave summary panel.
+ *
+ * The game asks the player to spend credits during the gap between waves, and
+ * until now that spending was blind - there was no way to know whether the next
+ * wave was fifteen basics or three armoured until it was already on the board.
+ * Naming the composition here turns the gap from a guess into a decision.
+ *
+ * @param {number} waveNumber - The wave being previewed
+ * @param {string} composition - e.g. "8 basic - 5 fast - 2 armored"
+ * @returns {HTMLElement}
+ */
+function buildNextWavePreview(waveNumber, composition) {
+    const block = document.createElement('div');
+    block.className = 'wave-summary-next';
+
+    const label = document.createElement('div');
+    label.className = 'wave-summary-next-label';
+    label.textContent = `Wave ${waveNumber} inbound`;
+
+    const detail = document.createElement('div');
+    detail.className = 'wave-summary-next-detail';
+    detail.textContent = composition;
+
+    block.append(label, detail);
+
+    return block;
+}
+
 export function showWaveSummary(summary) {
     const panel = document.createElement('div');
     panel.className = 'wave-summary';
@@ -1070,6 +1099,13 @@ export function showWaveSummary(summary) {
     const heading = document.createElement('h2');
     heading.textContent = 'Wave Complete';
     panel.appendChild(heading);
+
+    // What is coming next, named before the player spends the credits they
+    // were just awarded. Appended after the rows below so it reads as a
+    // footer; built here so the element exists in document order.
+    const preview = summary.nextComposition
+        ? buildNextWavePreview(summary.nextWave, summary.nextComposition)
+        : null;
 
     // Built with createElement rather than innerHTML. The values are internal
     // numbers so there is nothing to escape here, but keeping the two habits
@@ -1089,6 +1125,8 @@ export function showWaveSummary(summary) {
 
         return value;
     });
+
+    if (preview) panel.appendChild(preview);
 
     document.body.appendChild(panel);
 

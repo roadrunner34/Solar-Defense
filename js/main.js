@@ -46,7 +46,8 @@ import { initUI, setupUICallbacks, updateHUD, showScreen, hideAllScreens,
          showBossBar, updateBossBar, hideBossBar } from './ui.js';
 import { initAudio, playSound, panFromScreenX, resetSoundCooldowns } from './audio.js';
 import { startMusic, stopMusic, setMusicWave, setMusicIntensity } from './music.js';
-import { CONFIG, getWaveConfig, isBossWave, getBossHealthScale } from './config.js';
+import { CONFIG, getWaveConfig, isBossWave, getBossHealthScale,
+         getWaveFlavour, describeWaveComposition } from './config.js';
 
 // ==================== GAME STATE ====================
 // The game can be in one of these states at any time
@@ -485,8 +486,11 @@ function startWave(waveNumber) {
     // Reset wave tracking
     resetWaveTracking();
 
-    // Show wave announcement
-    showWaveAnnouncement(waveNumber);
+    // Show wave announcement.
+    //
+    // showWaveAnnouncement()'s second parameter has existed since Sprint 1 with
+    // a default of '' and no caller anywhere. This is the first thing to pass it.
+    showWaveAnnouncement(waveNumber, getWaveFlavour(waveNumber));
     playSound('waveStart');
 
     // The drone thickens as the waves get worse
@@ -503,7 +507,20 @@ function completeWave() {
     // Award the wave bonus and fold its breakdown into the summary, so the
     // player can see where the credits came from rather than just a total
     const bonusResult = awardWaveBonus(currentWave);
-    showWaveSummary({ ...getWaveSummary(), ...bonusResult });
+
+    // Name what is coming next, so the credits just awarded can be spent on a
+    // decision rather than a guess. Omitted when the campaign is over and the
+    // player has not yet chosen to continue - there is no "next wave" to
+    // prepare for until they do.
+    const nextWave = currentWave + 1;
+    const showNext = endlessMode || nextWave <= CAMPAIGN_WAVES;
+
+    showWaveSummary({
+        ...getWaveSummary(),
+        ...bonusResult,
+        nextWave: showNext ? nextWave : null,
+        nextComposition: showNext ? describeWaveComposition(nextWave) : null
+    });
     
     waveTransitionTimer = WAVE_TRANSITION_DELAY;
 }

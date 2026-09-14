@@ -982,6 +982,31 @@ body {
     font-variant-numeric: tabular-nums;
 }
 
+/* The next-wave footer. Separated from the earnings rows by a rule, because it
+   is the only part of this panel that is about the future rather than the
+   wave just finished - and it is the part the player is about to act on. */
+.wave-summary-next {
+    margin-top: var(--gap-3);
+    padding-top: var(--gap-3);
+    border-top: 1px solid var(--accent-line);
+    text-align: center;
+}
+
+.wave-summary-next-label {
+    margin-bottom: var(--gap-1);
+    color: var(--accent-dim);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.6px;
+    text-transform: uppercase;
+}
+
+.wave-summary-next-detail {
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 12px;
+}
+
 .wave-summary-row.highlight span:last-child {
     color: var(--credit);
 }

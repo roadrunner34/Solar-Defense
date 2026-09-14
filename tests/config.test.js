@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { CONFIG, getPlatformConfig, getEnemyConfig, getWaveConfig } from '../js/config.js';
+import { CONFIG, getPlatformConfig, getEnemyConfig, getWaveConfig , getWaveFlavour, describeWaveComposition } from '../js/config.js';
 
 describe('platform config', () => {
     it('defines a platforms section', () => {
@@ -120,5 +120,84 @@ describe('endless waves', () => {
     it('keeps all three enemy types in every generated wave', () => {
         const types = getWaveConfig(42).enemies.map(group => group.type);
         expect(types).toEqual(['basic', 'fast', 'armored']);
+    });
+});
+
+// ==================== WAVE FLAVOUR AND PREVIEW ====================
+
+/**
+ * showWaveAnnouncement(waveNumber, subtitle = '') has existed since Sprint 1
+ * with no caller ever passing the second argument - the same kind of dangling
+ * scaffold that showTooltip() and saveProgress() were. getWaveFlavour() fills it.
+ */
+describe('getWaveFlavour()', () => {
+    it('has a line for every authored wave', () => {
+        for (const wave of Object.keys(CONFIG.waves)) {
+            expect(getWaveFlavour(Number(wave)).length).toBeGreaterThan(0);
+        }
+    });
+
+    it('keeps talking past the campaign', () => {
+        for (const wave of [6, 7, 12, 40]) {
+            expect(getWaveFlavour(wave).length).toBeGreaterThan(0);
+        }
+    });
+
+    it('cycles the endless lines rather than running out', () => {
+        const period = CONFIG.endlessFlavour.length;
+        expect(getWaveFlavour(6)).toBe(getWaveFlavour(6 + period));
+    });
+
+    it('returns a string for a nonsense wave number', () => {
+        expect(typeof getWaveFlavour(0)).toBe('string');
+        expect(typeof getWaveFlavour(-3)).toBe('string');
+    });
+
+    // Terse on purpose: a wave banner is on screen for about a second and a
+    // half, and the player is watching the board rather than reading
+    it('keeps every line short enough to read at a glance', () => {
+        const lines = [
+            ...Object.values(CONFIG.waveFlavour),
+            ...CONFIG.endlessFlavour
+        ];
+
+        for (const line of lines) {
+            expect(line.length).toBeLessThan(46);
+        }
+    });
+});
+
+describe('describeWaveComposition()', () => {
+    it('names every enemy group in an authored wave', () => {
+        const summary = describeWaveComposition(3);
+
+        expect(summary).toContain('basic');
+        expect(summary).toContain('fast');
+    });
+
+    it('reports the real counts', () => {
+        const wave = CONFIG.waves[4];
+
+        for (const group of wave.enemies) {
+            expect(describeWaveComposition(4)).toContain(`${group.count} ${group.type}`);
+        }
+    });
+
+    it('mentions the boss on a boss wave', () => {
+        expect(describeWaveComposition(5)).toContain('boss');
+    });
+
+    it('does not mention a boss on a wave without one', () => {
+        expect(describeWaveComposition(4)).not.toContain('boss');
+    });
+
+    it('still describes generated waves', () => {
+        expect(describeWaveComposition(23).length).toBeGreaterThan(0);
+    });
+
+    it('never renders a zero-count group', () => {
+        for (let wave = 1; wave <= 30; wave++) {
+            expect(describeWaveComposition(wave)).not.toMatch(/\b0 /);
+        }
     });
 });

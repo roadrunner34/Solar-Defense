@@ -294,6 +294,35 @@ export const CONFIG = {
         }
     },
 
+    // ==================== WAVE FLAVOUR ====================
+    // One line per authored wave, shown under the wave number.
+    //
+    // This fills showWaveAnnouncement()'s `subtitle` parameter, which has
+    // existed since Sprint 1 with a default of '' and no caller anywhere - the
+    // same kind of dangling scaffold that showTooltip() and saveProgress() were
+    // before earlier sprints wired them up.
+    //
+    // Deliberately terse. A tower defence announces a wave for about a second
+    // and a half, which is time for a fragment, not a sentence - and the player
+    // is watching the board, not reading.
+    waveFlavour: {
+        1: 'Scouts on the near approach',
+        2: 'They have found the range',
+        3: 'Fast movers leading',
+        4: 'Mixed formation inbound',
+        5: 'Something large behind them'
+    },
+
+    // Lines for generated waves past the campaign, cycled in order. Endless
+    // mode needs to keep sounding like a war rather than a spreadsheet.
+    endlessFlavour: [
+        'No end to them',
+        'Holding the line',
+        'The approach is thick with contacts',
+        'Still coming',
+        'Nothing left to fall back to'
+    ],
+
     // ==================== PLANET ====================
     planet: {
         // How many enemies can reach the planet before the run ends.
@@ -870,4 +899,51 @@ export function getBossHealthScale(waveNumber) {
     const appearance = waveNumber / CONFIG.bosses.everyWaves; // 1, 2, 3, ...
 
     return 1 + (appearance - 1) * CONFIG.bosses.healthScalePerAppearance;
+}
+
+/**
+ * The flavour line shown under a wave's number.
+ *
+ * Authored for the campaign, cycled from a shorter list past it. Returns an
+ * empty string rather than null when there is nothing to say, because
+ * showWaveAnnouncement() treats any falsy subtitle as "no subtitle" and an
+ * empty span would still take up layout.
+ *
+ * @param {number} waveNumber
+ * @returns {string}
+ */
+export function getWaveFlavour(waveNumber) {
+    if (CONFIG.waveFlavour[waveNumber]) return CONFIG.waveFlavour[waveNumber];
+
+    const lines = CONFIG.endlessFlavour;
+    if (!lines || lines.length === 0) return '';
+
+    const past = waveNumber - AUTHORED_WAVE_COUNT - 1;
+    if (past < 0) return '';
+
+    return lines[past % lines.length];
+}
+
+/**
+ * A one-line summary of what a wave contains: "8 basic - 5 fast - 2 armored".
+ *
+ * The game asks players to spend credits before a wave arrives, and until now
+ * that spending was blind - you could not know whether the next wave was
+ * fifteen basics or three armoured until it was already on the board. Naming
+ * the composition turns a guess into a decision, and costs one function.
+ *
+ * @param {number} waveNumber
+ * @returns {string} Empty if the wave has no enemies
+ */
+export function describeWaveComposition(waveNumber) {
+    const wave = getWaveConfig(waveNumber);
+    if (!wave || !wave.enemies) return '';
+
+    const parts = wave.enemies
+        .filter(group => group.count > 0)
+        .map(group => `${group.count} ${group.type}`);
+
+    if (isBossWave(waveNumber)) parts.push('1 boss');
+
+    return parts.join(' · ');
 }
