@@ -26,6 +26,10 @@ import { getPlatformConfig, CONFIG } from './config.js';
 // Store all active platforms
 export const platforms = [];
 
+// Monotonic id source. Deriving ids from platforms.length instead meant that
+// removing a platform made the next one reuse a live id.
+let nextPlatformId = 0;
+
 // ==================== PLACEMENT CONSTANTS ====================
 // These define the rules for where platforms can be placed
 
@@ -588,8 +592,8 @@ export function createPlatform(type, position) {
         timeSinceLastShot: 0,    // Track firing cooldown
         currentTarget: null,     // Currently targeted enemy
         
-        // Platform ID for tracking
-        id: platforms.length,     // Simple ID based on array index
+        // Platform ID for tracking - unique for the lifetime of the page
+        id: nextPlatformId++,
         
         // Reference for easy access during interactions
         // Similar to how enemies store reference on mesh

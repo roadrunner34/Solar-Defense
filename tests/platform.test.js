@@ -80,6 +80,40 @@ describe('createPlatform()', () => {
     });
 });
 
+describe('platform ids', () => {
+    it('gives every platform a distinct id', () => {
+        const ids = [
+            createPlatform('laserBattery', new THREE.Vector3(20, 0, 0)),
+            createPlatform('laserBattery', new THREE.Vector3(-20, 0, 0)),
+            createPlatform('laserBattery', new THREE.Vector3(0, 0, 20))
+        ].map(p => p.id);
+
+        expect(new Set(ids).size).toBe(3);
+    });
+
+    it('does not reuse the id of a platform that is still alive', () => {
+        const first = createPlatform('laserBattery', new THREE.Vector3(20, 0, 0));
+        const second = createPlatform('laserBattery', new THREE.Vector3(-20, 0, 0));
+        const third = createPlatform('laserBattery', new THREE.Vector3(0, 0, 20));
+
+        // Deriving ids from platforms.length meant removing one made the next
+        // platform collide with a survivor
+        removePlatform(first);
+        const fourth = createPlatform('laserBattery', new THREE.Vector3(0, 0, -20));
+
+        expect(fourth.id).not.toBe(second.id);
+        expect(fourth.id).not.toBe(third.id);
+    });
+
+    it('keeps ids unique across a clear, as happens on restart', () => {
+        const before = createPlatform('laserBattery', new THREE.Vector3(20, 0, 0)).id;
+        clearAllPlatforms();
+        const after = createPlatform('laserBattery', new THREE.Vector3(20, 0, 0)).id;
+
+        expect(after).not.toBe(before);
+    });
+});
+
 describe('removePlatform()', () => {
     it('drops the platform from the array, the scene and marks it dead', () => {
         const platform = createPlatform('laserBattery', new THREE.Vector3(20, 0, 0));

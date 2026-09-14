@@ -27,6 +27,9 @@ import { dampAngle } from './mathUtils.js';
 // Import particle effects for muzzle sparks
 import { createMuzzleSparks } from './particles.js';
 
+// Short-lived visuals are stepped by the game loop, not their own rAF loop
+import { addEffect } from './effects.js';
+
 export let starbase = null;
 
 // Starbase stats (can be upgraded later)
@@ -519,34 +522,39 @@ function createMuzzleFlash(position) {
     ring.position.copy(position);
     scene.add(ring);
     
-    // Animate and remove the flash
+    // Animate and remove the flash.
+    //
+    // Driven by the game loop rather than its own requestAnimationFrame, so it
+    // pauses with the game. Steps are scaled against a 60fps baseline, which
+    // keeps the look identical at 60fps while stopping the effect from playing
+    // faster on a high-refresh display.
     let opacity = 1;
     let ringOpacity = 0.8;
     
-    const animate = () => {
-        opacity -= 0.12;
-        ringOpacity -= 0.1;
+    addEffect((deltaTime) => {
+        const step = Math.min(deltaTime, 0.5) * 60;
+        
+        opacity -= 0.12 * step;
+        ringOpacity -= 0.1 * step;
         
         // Flash expands and fades
-        flash.scale.multiplyScalar(1.25);
+        flash.scale.multiplyScalar(Math.pow(1.25, step));
         flashMaterial.opacity = Math.max(0, opacity);
         
         // Ring expands slower
-        ring.scale.multiplyScalar(1.15);
+        ring.scale.multiplyScalar(Math.pow(1.15, step));
         ringMaterial.opacity = Math.max(0, ringOpacity);
         
-        if (opacity > 0 || ringOpacity > 0) {
-            requestAnimationFrame(animate);
-        } else {
-            scene.remove(flash);
-            scene.remove(ring);
-            flashGeometry.dispose();
-            flashMaterial.dispose();
-            ringGeometry.dispose();
-            ringMaterial.dispose();
-        }
-    };
-    requestAnimationFrame(animate);
+        if (opacity > 0 || ringOpacity > 0) return true;
+        
+        scene.remove(flash);
+        scene.remove(ring);
+        flashGeometry.dispose();
+        flashMaterial.dispose();
+        ringGeometry.dispose();
+        ringMaterial.dispose();
+        return false;
+    });
 }
 
 /**

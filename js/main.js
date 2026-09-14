@@ -33,6 +33,8 @@ import { initEnemies, spawnEnemy, updateEnemies, clearEnemies,
 import { createStarbase, updateStarbase, resetStarbaseStats } from './starbase.js';
 import { createProjectile, updateProjectiles, clearProjectiles, createHitEffect } from './projectile.js';
 import { initParticles, updateParticles, createEnemyDeathEffect, createMuzzleSparks } from './particles.js';
+import { updateEffects, clearEffects } from './effects.js';
+import { clearAllPlatforms } from './platform.js';
 import { initEconomy, recordKill, recordShot, recordHit, awardWaveBonus,
          resetWaveTracking, getWaveSummary, getCredits, getScore } from './economy.js';
 import { initUI, setupUICallbacks, updateHUD, showScreen, hideAllScreens,
@@ -57,7 +59,7 @@ let currentState = GameState.MENU;
 // ==================== GAME VARIABLES ====================
 
 let renderer;
-let clock;
+let timer;
 let composer; // Post-processing effect composer
 let currentWave = 1;
 let totalWaves = 5; // Number of waves to win
@@ -159,8 +161,16 @@ function init() {
 
     
     
-    // Create clock for delta time calculation
-    clock = new THREE.Clock();
+    // Create the timer for delta time calculation.
+    //
+    // THREE.Timer replaces the deprecated THREE.Clock (deprecated in r183) and
+    // suits this game better in two ways: setTimescale(0) is an explicit pause
+    // that Clock never really offered - Clock.stop() was a no-op here, because
+    // autoStart restarted it on the next getDelta() - and connect(document)
+    // zeroes the delta while the tab is hidden, so returning to a backgrounded
+    // game no longer fast-forwards it.
+    timer = new THREE.Timer();
+    timer.connect(document);
     
     // Show start screen
     showScreen('start');
@@ -377,8 +387,14 @@ function startGame() {
     // Reset systems
     clearEnemies();
     clearProjectiles();
+    clearAllPlatforms();
+    clearEffects();
     resetStarbaseStats();
     initEconomy();
+    
+    // A restart can arrive straight from the pause screen, so make sure time
+    // is running again
+    timer.setTimescale(1);
     
     // Hide menu, show HUD
     hideAllScreens();
@@ -403,7 +419,11 @@ function pauseGame() {
     
     currentState = GameState.PAUSED;
     showScreen('pause');
-    clock.stop();
+    
+    // Freeze time. Everything driven by deltaTime - enemies, projectiles,
+    // particles and one-shot effects - stops with it, while the render loop
+    // and camera controls keep running so the paused scene stays live.
+    timer.setTimescale(0);
 }
 
 /**
@@ -414,7 +434,7 @@ function resumeGame() {
     
     currentState = GameState.PLAYING;
     hideAllScreens();
-    clock.start();
+    timer.setTimescale(1);
 }
 
 /**
@@ -512,12 +532,13 @@ function nextWave() {
  * Main game loop
  * This runs every frame (ideally 60 times per second)
  */
-function animate() {
+function animate(timestamp) {
     // Request next frame (this creates the loop)
     requestAnimationFrame(animate);
     
     // Calculate delta time (time since last frame)
-    const deltaTime = Math.min(clock.getDelta(), 0.1); // Cap at 100ms to prevent huge jumps
+    timer.update(timestamp);
+    const deltaTime = Math.min(timer.getDelta(), 0.1); // Cap at 100ms to prevent huge jumps
     
     // Only update game logic if playing
     if (currentState === GameState.PLAYING) {
@@ -537,6 +558,10 @@ function animate() {
     
     // Update particle effects (explosions, sparks, trails)
     updateParticles(deltaTime);
+    
+    // Update one-shot visuals (muzzle flashes, hit effects). While paused the
+    // timescale is 0, so these freeze in place rather than playing on.
+    updateEffects(deltaTime);
     
     // Render the scene through the post-processing composer
     // This applies bloom and other effects automatically

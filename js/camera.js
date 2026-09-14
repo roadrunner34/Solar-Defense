@@ -10,7 +10,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 // Import smooth animation utilities for camera transitions
-import { dampVector3, easeInOutCubic } from './mathUtils.js';
+import { easeInOutCubic } from './mathUtils.js';
 
 export let camera;
 export let controls;
@@ -18,6 +18,16 @@ export let controls;
 // Camera shake state (for impact effects)
 let shakeIntensity = 0;
 let shakeDecay = 5; // How fast shake fades
+
+// The offset applied by the last shake frame.
+//
+// This has to be tracked and undone rather than just added each frame:
+// OrbitControls derives its orbit from whatever camera.position happens to be
+// when update() runs. Leaving the shake in place means the controls read the
+// shaken position as the player's intended one and absorb it, so every shake
+// permanently nudges the orbit. Subtracting it first keeps the shake purely
+// cosmetic.
+const shakeOffset = new THREE.Vector3();
 
 /**
  * Creates and configures the game camera
@@ -79,6 +89,13 @@ function setupControls(renderer) {
  * @param {number} deltaTime - Time since last frame (optional, for shake)
  */
 export function updateCamera(deltaTime = 0.016) {
+    // Undo the previous frame's shake before OrbitControls reads the position,
+    // so the orbit it computes is the one the player actually set.
+    if (camera) {
+        camera.position.sub(shakeOffset);
+        shakeOffset.set(0, 0, 0);
+    }
+    
     if (controls) {
         controls.update();
     }
@@ -86,18 +103,27 @@ export function updateCamera(deltaTime = 0.016) {
     // Apply camera shake if active
     if (shakeIntensity > 0 && camera) {
         // Random offset based on intensity
-        const shakeX = (Math.random() - 0.5) * shakeIntensity;
-        const shakeY = (Math.random() - 0.5) * shakeIntensity;
-        const shakeZ = (Math.random() - 0.5) * shakeIntensity * 0.5;
+        shakeOffset.set(
+            (Math.random() - 0.5) * shakeIntensity,
+            (Math.random() - 0.5) * shakeIntensity,
+            (Math.random() - 0.5) * shakeIntensity * 0.5
+        );
         
-        // Apply shake (relative to current position)
-        camera.position.x += shakeX;
-        camera.position.y += shakeY;
-        camera.position.z += shakeZ;
+        // Apply shake on top of the settled orbit position
+        camera.position.add(shakeOffset);
         
         // Decay the shake over time
         shakeIntensity = Math.max(0, shakeIntensity - shakeDecay * deltaTime);
     }
+}
+
+/**
+ * Get the offset currently applied by camera shake.
+ * Exposed so tests can assert the shake is undone rather than accumulated.
+ * @returns {THREE.Vector3} The live offset vector
+ */
+export function getShakeOffset() {
+    return shakeOffset;
 }
 
 /**

@@ -16,6 +16,9 @@ import { scene } from './scene.js';
 import { CONFIG } from './config.js';
 import { enemies, damageEnemy } from './enemy.js';
 
+// Short-lived visuals are stepped by the game loop, not their own rAF loop
+import { addEffect } from './effects.js';
+
 // Store all active projectiles
 export const projectiles = [];
 
@@ -58,9 +61,11 @@ export function createProjectile(data) {
         data.direction.clone().normalize()
     );
     
-    // Add a glow effect using a point light
-    const glow = new THREE.PointLight(CONFIG.visual.projectileColor, 0.5, 5);
-    mesh.add(glow);
+    // No point light here on purpose. Attaching one per projectile changes the
+    // scene's light count on every shot, which forces Three.js to recompile the
+    // shader program for every MeshPhongMaterial in the scene - a visible hitch
+    // each time a laser spawns or despawns. The glow comes from the material's
+    // HDR colour being picked up by the bloom pass instead, which costs nothing.
     
     // Create projectile data object
     const projectile = {
@@ -279,36 +284,40 @@ export function createHitEffect(position) {
     
     scene.add(ring);
     
-    // Animate expansion and fade
+    // Animate expansion and fade.
+    //
+    // Driven by the game loop rather than its own requestAnimationFrame, so it
+    // pauses with the game. Steps are scaled against a 60fps baseline, which
+    // keeps the look identical at 60fps while stopping the effect from playing
+    // faster on a high-refresh display.
     let scale = 1;
     let opacity = 1;
     let flashOpacity = 1;
     
-    const animate = () => {
-        scale += 0.4;
-        opacity -= 0.08;
-        flashOpacity -= 0.15; // Flash fades faster
+    addEffect((deltaTime) => {
+        const step = Math.min(deltaTime, 0.5) * 60;
+        
+        scale += 0.4 * step;
+        opacity -= 0.08 * step;
+        flashOpacity -= 0.15 * step; // Flash fades faster
         
         // Update ring
         ring.scale.set(scale, scale, scale);
         ringMaterial.opacity = Math.max(0, opacity);
         
         // Update flash (shrinks as it fades)
-        flash.scale.multiplyScalar(0.85);
+        flash.scale.multiplyScalar(Math.pow(0.85, step));
         flashMaterial.opacity = Math.max(0, flashOpacity);
         
-        if (opacity > 0 || flashOpacity > 0) {
-            requestAnimationFrame(animate);
-        } else {
-            // Clean up
-            scene.remove(ring);
-            scene.remove(flash);
-            ringGeometry.dispose();
-            ringMaterial.dispose();
-            flashGeometry.dispose();
-            flashMaterial.dispose();
-        }
-    };
-    
-    requestAnimationFrame(animate);
+        if (opacity > 0 || flashOpacity > 0) return true;
+        
+        // Clean up
+        scene.remove(ring);
+        scene.remove(flash);
+        ringGeometry.dispose();
+        ringMaterial.dispose();
+        flashGeometry.dispose();
+        flashMaterial.dispose();
+        return false;
+    });
 }

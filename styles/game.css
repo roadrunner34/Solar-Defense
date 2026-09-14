@@ -198,7 +198,13 @@ body {
     transform: translate(-50%, -50%);
 }
 
-/* Damage numbers (floating text when hitting enemies) */
+/* Damage numbers (floating text when hitting enemies)
+ *
+ * The float-and-fade is animated by GSAP in ui.js (showDamageNumber). There is
+ * deliberately no CSS animation here: a @keyframes rule driving opacity and
+ * transform at the same time as GSAP left the two fighting over the same
+ * properties. GSAP owns the motion; this rule owns the static styling.
+ * Inline styles from showDamageNumber override the colour and size for kills. */
 .damage-number {
     position: fixed;
     color: #ffff00;
@@ -207,18 +213,6 @@ body {
     text-shadow: 0 0 5px #ff8800;
     pointer-events: none;
     z-index: 200;
-    animation: floatUp 1s ease-out forwards;
-}
-
-@keyframes floatUp {
-    0% {
-        opacity: 1;
-        transform: translateY(0);
-    }
-    100% {
-        opacity: 0;
-        transform: translateY(-50px);
-    }
 }
 
 /* Health bar styles (for enemies) */

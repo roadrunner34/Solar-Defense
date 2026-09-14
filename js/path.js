@@ -224,6 +224,20 @@ export function getDirectionOnPath(pathName, progress) {
 }
 
 /**
+ * Get the total length of a path in world units
+ *
+ * Enemy movement is tracked as a 0-1 fraction of the path, so converting a
+ * world speed into progress needs the path's real length.
+ *
+ * @param {string} pathName - Which path
+ * @returns {number} Total path length
+ */
+export function getPathLength(pathName) {
+    const path = paths[pathName] || paths['default'];
+    return path.totalLength;
+}
+
+/**
  * Get the spawn position for a path
  * @param {string} pathName - Which path
  * @returns {THREE.Vector3} Starting position

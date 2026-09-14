@@ -14,7 +14,7 @@
 import * as THREE from 'three';
 import { scene } from './scene.js';
 import { CONFIG, getEnemyConfig } from './config.js';
-import { getPositionOnPath, getDirectionOnPath, hasReachedPlanet } from './path.js';
+import { getPositionOnPath, getDirectionOnPath, hasReachedPlanet, getPathLength } from './path.js';
 
 // Store all active enemies
 export const enemies = [];
@@ -22,6 +22,9 @@ export const enemies = [];
 // Geometry and materials (shared for performance)
 const enemyGeometries = {};
 const enemyMaterials = {};
+
+// How far above an enemy its health bar floats, in world units
+const HEALTH_BAR_HEIGHT_OFFSET = 2;
 
 /**
  * Initialize enemy system
@@ -89,7 +92,15 @@ export function spawnEnemy(type = 'basic', pathName = 'default') {
         armor: config.armor,
         pathName,
         pathProgress: 0, // 0 = start, 1 = end
+        
+        // Cached so movement can be expressed in world units per second
+        // rather than in fractions of a path (see updateEnemies)
+        pathLength: getPathLength(pathName),
+        
         alive: true,
+        
+        // Handle for the pending hit-flash reset, so it can be cancelled
+        flashTimeout: null,
         creditValue: CONFIG.economy.creditsPerKill[type] || 10,
         pointValue: CONFIG.scoring.pointsPerKill[type] || 100,
         
@@ -147,9 +158,14 @@ export function updateEnemies(deltaTime) {
         
         if (!enemy.alive) continue;
         
-        // Calculate how much to move based on speed and time
-        // We convert speed to path progress (path length normalized to 0-1)
-        const pathSpeed = (enemy.speed / 100) * deltaTime;
+        // Calculate how much to move based on speed and time.
+        //
+        // Progress is a 0-1 fraction of the path, so converting a world speed
+        // into progress means dividing by that path's actual length. Dividing
+        // by a hardcoded 100 instead made an enemy's real speed depend on which
+        // path it happened to be assigned - the three paths differ in length,
+        // so identical enemies visibly travelled at different speeds.
+        const pathSpeed = (enemy.speed / enemy.pathLength) * deltaTime;
         enemy.pathProgress += pathSpeed;
         
         // Get new position on path
@@ -191,7 +207,7 @@ function updateHealthBarPosition(enemy) {
     // This requires camera access - we'll handle this in main.js
     // For now, store 3D position and let main.js do the projection
     enemy.healthBarPosition = enemy.mesh.position.clone();
-    enemy.healthBarPosition.y += 2; // Offset above enemy
+    enemy.healthBarPosition.y += HEALTH_BAR_HEIGHT_OFFSET; // Offset above enemy
 }
 
 /**
@@ -203,9 +219,13 @@ export function projectHealthBars(camera) {
     enemies.forEach(enemy => {
         if (!enemy.healthBar || !enemy.alive) return;
         
-        // Convert 3D position to screen coordinates
-        const vector = enemy.healthBarPosition || enemy.mesh.position.clone();
-        vector.y += 2;
+        // Convert 3D position to screen coordinates.
+        //
+        // Clone before projecting: healthBarPosition is a live reference, and
+        // project() rewrites the vector in place. The offset is applied once,
+        // in updateHealthBarPosition - adding it again here made bars float at
+        // twice the intended height.
+        const vector = (enemy.healthBarPosition || enemy.mesh.position).clone();
         vector.project(camera);
         
         // Convert from normalized (-1 to 1) to screen pixels
@@ -284,8 +304,13 @@ function flashEnemy(enemy) {
     const originalColor = enemy.mesh.material.emissive.getHex();
     enemy.mesh.material.emissive.setHex(0xffffff);
     
-    setTimeout(() => {
-        if (enemy.mesh.material) {
+    // Keep the handle so removeEnemy can cancel it. Enemies clone their
+    // material and dispose it on death, so a flash reset left pending past that
+    // point would write to a disposed material.
+    clearTimeout(enemy.flashTimeout);
+    enemy.flashTimeout = setTimeout(() => {
+        enemy.flashTimeout = null;
+        if (enemy.alive && enemy.mesh.material) {
             enemy.mesh.material.emissive.setHex(originalColor);
         }
     }, 100);
@@ -297,6 +322,14 @@ function flashEnemy(enemy) {
  * @param {number} index - Index in enemies array
  */
 function removeEnemy(enemy, index) {
+    // Mark dead first: the pending hit-flash checks this before touching the
+    // material, and getEnemyCount() filters on it
+    enemy.alive = false;
+    
+    // Cancel any pending hit-flash reset before the material is disposed
+    clearTimeout(enemy.flashTimeout);
+    enemy.flashTimeout = null;
+    
     // Remove health bar from DOM
     if (enemy.healthBar) {
         enemy.healthBar.remove();
