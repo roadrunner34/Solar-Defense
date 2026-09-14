@@ -26,6 +26,7 @@
 import { getCredits, getScore, getAccuracy, getGameStats, canAfford } from './economy.js';
 import { getEnemyCount } from './enemy.js';
 import { CONFIG } from './config.js';
+import { playSound } from './audio.js';
 import gsap from 'gsap';
 
 // Cache DOM element references (faster than querying each frame)
@@ -81,6 +82,37 @@ export function initUI() {
     // Start screen record line, and the victory screen's endless option
     elements.bestRecord = document.getElementById('best-record');
     elements.continueEndless = document.getElementById('continue-endless');
+
+    wireButtonClickSound();
+}
+
+/**
+ * Give every button in the game a click sound, through one delegated listener.
+ *
+ * Delegated rather than attached per button because several of the game's
+ * buttons do not exist yet when this runs - the build menu is generated from
+ * the config, and the selection panel's upgrade buttons are rebuilt on every
+ * render. A listener per button would have to be re-attached in both places and
+ * would be forgotten by whatever adds buttons next.
+ *
+ * playSound() is a no-op until the audio graph exists, so the Start button that
+ * bootstraps audio is silently exempt - which is correct. There is nothing to
+ * play it through yet.
+ */
+function wireButtonClickSound() {
+    if (typeof document === 'undefined' || document.body?.dataset.clickSound) return;
+
+    // Marked on the body so a second initUI() - which the tests do, with a
+    // fresh fixture each time - does not stack a second listener
+    if (document.body) document.body.dataset.clickSound = 'true';
+
+    document.addEventListener('click', (event) => {
+        const button = event.target instanceof Element
+            ? event.target.closest('button')
+            : null;
+
+        if (button && !button.disabled) playSound('uiClick');
+    });
 }
 
 /**

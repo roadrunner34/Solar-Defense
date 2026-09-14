@@ -28,6 +28,7 @@ import { getClosestEnemy } from './enemy.js';
 import { spendCredits, addCredits, canAfford } from './economy.js';
 import { createMuzzleSparks } from './particles.js';
 import { updateTurretAim } from './turret.js';
+import { playSound } from './audio.js';
 
 // Store all active platforms
 export const platforms = [];
@@ -516,9 +517,11 @@ export function confirmPlacement() {
     );
     
     
+    playSound('build');
+
     // Remove the preview (placement complete)
     removePlacementPreview();
-    
+
     return platform;
 }
 

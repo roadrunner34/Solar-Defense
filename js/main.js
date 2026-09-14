@@ -42,6 +42,7 @@ import { initUI, setupUICallbacks, updateHUD, showScreen, hideAllScreens,
          setHUDVisible, showDamageNumber, showFloatingText, showWaveAnnouncement,
          showWaveSummary, worldToScreen, initBuildMenu, initIntegrityPips,
          updateIntegrity, showBestRecord, showTooltip } from './ui.js';
+import { initAudio, playSound, panFromScreenX, resetSoundCooldowns } from './audio.js';
 import { CONFIG, getWaveConfig } from './config.js';
 
 // ==================== GAME STATE ====================
@@ -246,7 +247,20 @@ function init() {
  * Start a new game
  */
 function startGame() {
-    
+
+    // Build the audio graph on the way in.
+    //
+    // This has to happen inside the handler for a real user gesture, and this
+    // function is one - it is the Start button's callback. An AudioContext
+    // constructed anywhere in init() would be born suspended and play nothing,
+    // silently, with no error to explain why.
+    initAudio();
+
+    // Cooldowns are keyed on the audio context clock, which keeps running
+    // across a restart. Without clearing them, the first shot of a new run can
+    // be swallowed by the cooldown of the last shot of the previous one.
+    resetSoundCooldowns();
+
     currentState = GameState.PLAYING;
     currentWave = 1;
     endlessMode = false;
@@ -421,9 +435,10 @@ function startWave(waveNumber) {
     
     // Reset wave tracking
     resetWaveTracking();
-    
+
     // Show wave announcement
     showWaveAnnouncement(waveNumber);
+    playSound('waveStart');
 }
 
 /**
@@ -598,14 +613,16 @@ function update(deltaTime) {
     if (projectileData) {
         createProjectile(projectileData);
         recordShot(); // Track for accuracy
+        playWeaponSound(projectileData);
     }
-    
+
     // --- PLATFORMS ---
     // Deployed platforms acquire their own targets and fire independently,
     // returning projectile data in the same shape the starbase does
     updatePlatforms(deltaTime).forEach(platformProjectile => {
         createProjectile(platformProjectile);
         recordShot(); // Track for accuracy
+        playWeaponSound(platformProjectile);
     });
     
     // --- PROJECTILES ---
@@ -632,7 +649,21 @@ function update(deltaTime) {
         // equally-weighted explosions
         createHitEffect(hit.position, hit.splash ? 0.6 : 1);
 
-        if (!hit.destroyed) return;
+        // The same reasoning applies to the sound. A splash victim is quieter
+        // and slightly higher than the round that caused it, so a detonation
+        // reads as one impact with debris rather than as five separate kills.
+        const pan = panFromScreenX(screenPos.x);
+
+        if (!hit.destroyed) {
+            playSound('hit', { pan, volume: hit.splash ? 0.6 : 1 });
+            return;
+        }
+
+        playSound('explosion', {
+            pan,
+            volume: hit.splash ? 0.7 : 1,
+            pitch: hit.enemy.type === 'armored' ? 0.85 : 1
+        });
 
         recordKill(hit.enemy.type);
         enemiesClearedThisWave++;
@@ -709,6 +740,9 @@ function handleBreach(enemyResult) {
     if (breachPoint) {
         const screenPos = worldToScreen(breachPoint, camera);
         showFloatingText('BREACH', screenPos.x, screenPos.y, '#ff5d5d');
+        playSound('breach', { pan: panFromScreenX(screenPos.x) });
+    } else {
+        playSound('breach');
     }
 
     if (planetIntegrity > 0) return false;
@@ -737,6 +771,26 @@ function creditPlatform(hit) {
 
     platform.damageDealt += hit.damage;
     if (hit.destroyed) platform.kills++;
+}
+
+/**
+ * Play the firing sound for a shot that was just taken.
+ *
+ * Keyed on the projectile type rather than on what fired it, because that is
+ * the thing the sound is describing - the starbase and a Laser Battery both
+ * fire lasers and should both sound like it. Adding a third ordnance type to
+ * the config therefore only needs a matching recipe in CONFIG.audio.sounds.
+ *
+ * @param {object} projectileData - From updateStarbase() or updatePlatforms()
+ */
+function playWeaponSound(projectileData) {
+    const sound = projectileData.projectileType === 'missile'
+        ? 'missileLaunch'
+        : 'laser';
+
+    const screenPos = worldToScreen(projectileData.position, camera);
+
+    playSound(sound, { pan: panFromScreenX(screenPos.x) });
 }
 
 /**

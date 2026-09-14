@@ -276,6 +276,191 @@ export const CONFIG = {
         frameBudgetMs: 22
     },
 
+    // ==================== AUDIO ====================
+    // Every sound in the game is synthesized at runtime - there are no audio
+    // files, for the same reason there are no texture files: the whole project
+    // generates its assets at load time. js/audio.js renders these recipes
+    // through the Web Audio graph.
+    //
+    // A sound is a stack of layers. Each layer is either a tone (an oscillator)
+    // or noise (a white-noise buffer), optionally through a filter, with an
+    // attack-decay envelope. 'freq' is a [start, end] pair ramped exponentially
+    // over the layer's duration - that ramp is what turns a static beep into
+    // something with a shape.
+    audio: {
+        // Concurrent voices allowed before new sounds are dropped. A missile
+        // clearing six enemies fires six explosions in one frame; without a cap
+        // they sum into clipping, and a late endless wave becomes a wall.
+        maxVoices: 16,
+
+        // Sounds are quieter than you would expect in isolation, because a
+        // dozen of them overlap constantly. These are tuned for the busy case.
+        sounds: {
+            // A dumb energy bolt: bright, short, falling. The bandpass sweeping
+            // down with the oscillator is what gives it the "pew" rather than a
+            // flat buzz.
+            laser: {
+                cooldown: 0.03,
+                variance: 0.08,
+                layers: [
+                    {
+                        source: 'tone', wave: 'sawtooth',
+                        freq: [1200, 300], duration: 0.12,
+                        gain: 0.3, attack: 0.004,
+                        filter: { type: 'bandpass', freq: [2400, 600], q: 4 }
+                    }
+                ]
+            },
+
+            // Heavy ordnance leaving a tube: a noise whoosh over a low thump.
+            missileLaunch: {
+                cooldown: 0.05,
+                variance: 0.06,
+                layers: [
+                    {
+                        source: 'noise',
+                        duration: 0.38, gain: 0.26, attack: 0.01,
+                        filter: { type: 'lowpass', freq: [1800, 220], q: 1 }
+                    },
+                    {
+                        source: 'tone', wave: 'sine',
+                        freq: [200, 55], duration: 0.3,
+                        gain: 0.22, attack: 0.006
+                    }
+                ]
+            },
+
+            // The kill sound. Noise body for the debris, sine thump for the
+            // weight - an explosion without the low end reads as a hiss.
+            explosion: {
+                cooldown: 0.04,
+                variance: 0.12,
+                layers: [
+                    {
+                        source: 'noise',
+                        duration: 0.5, gain: 0.42, attack: 0.004,
+                        filter: { type: 'lowpass', freq: [1400, 80], q: 1 }
+                    },
+                    {
+                        source: 'tone', wave: 'sine',
+                        freq: [130, 38], duration: 0.36,
+                        gain: 0.3, attack: 0.004
+                    }
+                ]
+            },
+
+            // A hit that did not kill. Deliberately tiny: this fires far more
+            // often than anything else in the game.
+            hit: {
+                cooldown: 0.02,
+                variance: 0.15,
+                layers: [
+                    {
+                        source: 'noise',
+                        duration: 0.07, gain: 0.14, attack: 0.002,
+                        filter: { type: 'bandpass', freq: [3200, 1400], q: 2 }
+                    }
+                ]
+            },
+
+            // An enemy reached the planet. Two sines a hair apart, so they beat
+            // against each other - an unsteady, wrong sound, which is the point.
+            // Priority, because this must never be what the voice cap eats.
+            breach: {
+                cooldown: 0.4,
+                priority: true,
+                layers: [
+                    {
+                        source: 'tone', wave: 'sine',
+                        freq: [90, 64], duration: 1.2,
+                        gain: 0.34, attack: 0.02
+                    },
+                    {
+                        source: 'tone', wave: 'sine',
+                        freq: [94, 67], duration: 1.2,
+                        gain: 0.34, attack: 0.02
+                    },
+                    {
+                        source: 'noise',
+                        duration: 0.6, gain: 0.3, attack: 0.005,
+                        filter: { type: 'lowpass', freq: [900, 60], q: 1 }
+                    }
+                ]
+            },
+
+            // UI. Rising for things you gain, falling for things you give up.
+            build: {
+                cooldown: 0.05,
+                layers: [
+                    {
+                        source: 'tone', wave: 'triangle',
+                        freq: [420, 840], duration: 0.16,
+                        gain: 0.2, attack: 0.005
+                    }
+                ]
+            },
+
+            sell: {
+                cooldown: 0.05,
+                layers: [
+                    {
+                        source: 'tone', wave: 'triangle',
+                        freq: [720, 340], duration: 0.16,
+                        gain: 0.2, attack: 0.005
+                    }
+                ]
+            },
+
+            // Two notes, the second delayed - a small fanfare for spending money
+            upgrade: {
+                cooldown: 0.05,
+                layers: [
+                    {
+                        source: 'tone', wave: 'triangle',
+                        freq: [600, 600], duration: 0.1,
+                        gain: 0.18, attack: 0.004
+                    },
+                    {
+                        source: 'tone', wave: 'triangle',
+                        freq: [900, 900], duration: 0.16,
+                        gain: 0.18, attack: 0.004, delay: 0.08
+                    }
+                ]
+            },
+
+            uiClick: {
+                cooldown: 0.02,
+                layers: [
+                    {
+                        source: 'tone', wave: 'square',
+                        freq: [900, 880], duration: 0.035,
+                        gain: 0.08, attack: 0.002
+                    }
+                ]
+            },
+
+            // A wave is starting. Priority - it is an announcement, and being
+            // dropped because the previous wave's last explosion is still
+            // ringing would be exactly backwards.
+            waveStart: {
+                cooldown: 0.5,
+                priority: true,
+                layers: [
+                    {
+                        source: 'tone', wave: 'triangle',
+                        freq: [440, 440], duration: 0.28,
+                        gain: 0.22, attack: 0.01
+                    },
+                    {
+                        source: 'tone', wave: 'triangle',
+                        freq: [660, 660], duration: 0.4,
+                        gain: 0.22, attack: 0.01, delay: 0.14
+                    }
+                ]
+            }
+        }
+    },
+
     // ==================== SCORING ====================
     scoring: {
         pointsPerKill: {

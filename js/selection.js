@@ -27,6 +27,7 @@ import { scene } from './scene.js';
 import { platforms, sellPlatform, getSellValue, createRangeIndicator } from './platform.js';
 import { starbase, getStarbaseStats, upgradeStarbase } from './starbase.js';
 import { getPlatformConfig, CONFIG } from './config.js';
+import { playSound } from './audio.js';
 import {
     UPGRADE_STATS,
     describeUpgrades,
@@ -323,10 +324,12 @@ function formatName(type) {
 function handleUpgrade(stat) {
     if (!selected || !UPGRADE_STATS.includes(stat)) return;
 
+    let result;
+
     if (selected.isStarbase) {
         const base = CONFIG.starbase;
 
-        purchaseUpgrade(starbaseTarget, stat, base, (upgradedStat, value) => {
+        result = purchaseUpgrade(starbaseTarget, stat, base, (upgradedStat, value) => {
             // upgradeStarbase() adds to the current value rather than setting
             // it, so hand it the difference from where the stat is now
             const current = getStarbaseStats()[upgradedStat];
@@ -335,12 +338,17 @@ function handleUpgrade(stat) {
     } else {
         const base = getPlatformConfig(selected.type);
 
-        purchaseUpgrade(selected, stat, base, (upgradedStat, value) => {
+        result = purchaseUpgrade(selected, stat, base, (upgradedStat, value) => {
             selected[upgradedStat] = value;
         });
 
         applyUpgradeVisual(selected);
     }
+
+    // Only on an upgrade that actually happened. purchaseUpgrade() refuses a
+    // maxed stat or an unaffordable one, and a confirmation chime for a
+    // purchase that was declined is worse than no sound at all.
+    if (result && result.success) playSound('upgrade');
 
     refreshPanel();
 }
@@ -389,6 +397,8 @@ function handleSell() {
     if (!selected || selected.isStarbase) return 0;
 
     const refund = sellPlatform(selected);
+    if (refund > 0) playSound('sell');
+
     clearSelection();
 
     return refund;
