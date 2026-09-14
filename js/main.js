@@ -37,7 +37,7 @@ import { updateEffects, clearEffects } from './effects.js';
 import { updatePlatforms, clearAllPlatforms, placementState, platforms } from './platform.js';
 import { initEconomy, recordKill, recordShot, recordHit, awardWaveBonus,
          resetWaveTracking, getWaveSummary, getCredits, getScore,
-         saveProgress, loadBestRun } from './economy.js';
+         saveProgress, loadBestRun, updateCombo } from './economy.js';
 import { initUI, setupUICallbacks, updateHUD, showScreen, hideAllScreens,
          setHUDVisible, showDamageNumber, showFloatingText, showWaveAnnouncement,
          showWaveSummary, worldToScreen, initBuildMenu, initIntegrityPips,
@@ -654,6 +654,11 @@ function update(deltaTime) {
         }
     }
     
+    // --- KILL CHAIN ---
+    // Run down before anything can add to it this frame, so a chain that
+    // expires does so on the frame it actually ran out
+    updateCombo(deltaTime);
+
     // --- ENEMIES ---
     const enemyResult = updateEnemies(deltaTime);
     
@@ -735,13 +740,18 @@ function update(deltaTime) {
             return;
         }
 
+        const award = recordKill(hit.enemy.type);
+
+        // Pitch rises with the chain, so a streak is audible before it is read.
+        // Capped well short of a squeak - this fires dozens of times a wave.
+        const comboPitch = 1 + (award.multiplier - 1) * 0.12;
+
         playSound('explosion', {
             pan,
             volume: hit.splash ? 0.7 : 1,
-            pitch: hit.enemy.type === 'armored' ? 0.85 : 1
+            pitch: (hit.enemy.type === 'armored' ? 0.85 : 1) * comboPitch
         });
 
-        recordKill(hit.enemy.type);
         enemiesClearedThisWave++;
         createEnemyDeathEffect(hit.position, hit.enemy.type);
 
@@ -756,11 +766,16 @@ function update(deltaTime) {
 
         applyHitStop(hit.enemy.type);
 
+        // The amount actually awarded, not the enemy's base value. Showing the
+        // base would quietly contradict the credit counter the moment a chain
+        // was running, which is exactly when the player is watching it.
         showFloatingText(
-            `+${hit.creditValue}`,
+            award.multiplier > 1
+                ? `+${award.credits} x${Number(award.multiplier.toFixed(2))}`
+                : `+${award.credits}`,
             screenPos.x + 20,
             screenPos.y - 10,
-            '#ffff00'
+            award.multiplier > 1 ? '#ffb547' : '#ffff00'
         );
     });
     

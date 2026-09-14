@@ -23,7 +23,8 @@
  * - Easing: How the animation accelerates/decelerates (e.g., "power2.out")
  */
 
-import { getCredits, getScore, getAccuracy, getGameStats, canAfford } from './economy.js';
+import { getCredits, getScore, getAccuracy, getGameStats, canAfford,
+         getComboMultiplier, getComboChain } from './economy.js';
 import { getEnemyCount } from './enemy.js';
 import { CONFIG } from './config.js';
 import { playSound } from './audio.js';
@@ -71,6 +72,10 @@ export function initUI() {
     elements.waveProgress = document.getElementById('wave-progress');
     elements.enemiesPlural = document.getElementById('enemies-plural');
     elements.integrityPips = document.getElementById('integrity-pips');
+
+    // Kill chain indicator
+    elements.comboIndicator = document.getElementById('combo-indicator');
+    elements.comboMultiplier = document.getElementById('combo-multiplier');
 
     // Boss health bar
     elements.bossBar = document.getElementById('boss-bar');
@@ -135,6 +140,52 @@ function wireButtonClickSound() {
 
         if (button && !button.disabled) playSound('uiClick');
     });
+}
+
+// ==================== KILL CHAIN ====================
+
+/** The multiplier the indicator last rendered, so it only animates on change. */
+let lastComboMultiplier = 1;
+
+/**
+ * Show the kill chain multiplier, but only while there is one.
+ *
+ * Hidden at x1 rather than shown greyed out. A HUD element that is present and
+ * inert most of the time trains the eye to ignore it, which is exactly the
+ * opposite of what a thing that appears when you are doing well should do.
+ */
+function updateComboIndicator() {
+    if (!elements.comboIndicator) return;
+
+    const multiplier = getComboMultiplier();
+
+    if (multiplier <= 1) {
+        elements.comboIndicator.hidden = true;
+        lastComboMultiplier = 1;
+        return;
+    }
+
+    elements.comboIndicator.hidden = false;
+
+    if (elements.comboMultiplier) {
+        // One decimal at most, and no trailing .0 - "x2" rather than "x2.0"
+        elements.comboMultiplier.textContent = `x${Number(multiplier.toFixed(2))}`;
+    }
+
+    // Intensity rises with the chain, so a big streak is legible peripherally
+    elements.comboIndicator.classList.toggle('hot', multiplier >= CONFIG.combo.max);
+
+    if (multiplier === lastComboMultiplier) return;
+    lastComboMultiplier = multiplier;
+
+    if (prefersReducedMotion()) return;
+
+    // A small pop each time the multiplier climbs. Fires on change only -
+    // animating every frame would make it vibrate rather than pulse.
+    gsap.fromTo(elements.comboIndicator,
+        { scale: 1.35 },
+        { scale: 1, duration: 0.28, ease: 'back.out(2.5)' }
+    );
 }
 
 // ==================== BOSS HEALTH BAR ====================
@@ -537,6 +588,8 @@ export function setupUICallbacks(callbacks) {
  */
 export function updateHUD(waveNumber, selectedPlatformType = null, waveProgress = null) {
     const remaining = getEnemyCount();
+
+    updateComboIndicator();
 
     // Update wave number
     if (elements.waveNumber) {

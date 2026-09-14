@@ -773,6 +773,30 @@ export const CONFIG = {
         }
     },
 
+    // ==================== KILL CHAIN ====================
+    // Kills that land close together pay a rising multiplier on both credits
+    // and score.
+    //
+    // The point is not the extra income - it is that it gives a well-built
+    // board something to be visibly good at. Concentrated fire that deletes a
+    // group in two seconds now reads differently from the same kills spread
+    // across ten, which is a distinction the game could not previously express.
+    combo: {
+        // Seconds after a kill in which the next one continues the chain.
+        // Roughly the gap between shots from a Missile Launcher, so keeping a
+        // chain alive on a thin wave takes a board that is genuinely covering
+        // the approach rather than one lucky platform.
+        window: 2,
+
+        // Added to the multiplier per kill after the first
+        step: 0.25,
+
+        // Ceiling. Without one, a late endless wave of forty enemies would pay
+        // a multiplier in the double digits and make every earlier wave
+        // irrelevant to the score.
+        max: 3
+    },
+
     // ==================== SCORING ====================
     scoring: {
         pointsPerKill: {

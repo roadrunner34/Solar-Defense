@@ -407,6 +407,55 @@ body {
     color: var(--good);
 }
 
+/* ==================== KILL CHAIN ==================== */
+
+/* Sits just under the wave panel, out of the way of both the boss bar above
+   and the build menu opposite. Only present while a chain is running. */
+
+#combo-indicator {
+    position: absolute;
+    top: 152px;
+    left: var(--hud-inset);
+    display: flex;
+    align-items: baseline;
+    gap: var(--gap-2);
+    padding: 6px 12px;
+    background: var(--surface-1);
+    border: 1px solid rgba(255, 181, 71, 0.4);
+    border-radius: var(--radius);
+    pointer-events: none;
+    transform-origin: left center;
+}
+
+#combo-multiplier {
+    color: var(--warn);
+    font-family: var(--font-mono);
+    font-size: 20px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 12px rgba(255, 181, 71, 0.5);
+}
+
+#combo-label {
+    color: var(--text-faint);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+}
+
+/* At the ceiling the indicator goes gold, so hitting the cap is legible
+   without reading the number */
+#combo-indicator.hot {
+    border-color: rgba(255, 210, 87, 0.75);
+    box-shadow: 0 0 18px rgba(255, 210, 87, 0.28);
+}
+
+#combo-indicator.hot #combo-multiplier {
+    color: var(--credit);
+    text-shadow: 0 0 16px rgba(255, 210, 87, 0.7);
+}
+
 /* ==================== BOSS HEALTH BAR ==================== */
 
 /* Centred at the top, wide, and the only red thing in the HUD. A boss fight is

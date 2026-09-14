@@ -24,6 +24,18 @@ let shotsHit = 0;
 let creditsEarnedThisWave = 0;
 let scoreEarnedThisWave = 0;
 
+// ==================== KILL CHAIN ====================
+//
+// How many kills are in the current chain, and how long is left to extend it.
+// The chain is broken by the timer running out rather than by anything else,
+// so a player who keeps enemies dying keeps the multiplier.
+
+let comboChain = 0;
+let comboTimer = 0;
+
+// The highest multiplier reached this run, for the end-of-run summary
+let bestComboMultiplier = 1;
+
 /**
  * Initialize economy for a new game
  * @param {number} startingCredits - Override starting credits (optional)
@@ -36,6 +48,9 @@ export function initEconomy(startingCredits = null) {
     shotsHit = 0;
     creditsEarnedThisWave = 0;
     scoreEarnedThisWave = 0;
+    comboChain = 0;
+    comboTimer = 0;
+    bestComboMultiplier = 1;
 }
 
 /**
@@ -99,20 +114,87 @@ export function addScore(amount) {
 }
 
 /**
- * Record a kill (for statistics)
- * Also adds appropriate credits and score
+ * Record a kill, awarding credits and score with the current chain multiplier.
+ *
  * @param {string} enemyType - Type of enemy killed
+ * @returns {{credits: number, score: number, multiplier: number, chain: number}}
+ *          What was actually awarded - the caller needs this for the floating
+ *          "+N" text, which would otherwise show the base value and quietly
+ *          contradict the credit counter
  */
 export function recordKill(enemyType) {
     totalKills++;
-    
+
+    // Extend the chain if the window is still open, otherwise start a new one
+    comboChain = comboTimer > 0 ? comboChain + 1 : 1;
+    comboTimer = CONFIG.combo.window;
+
+    const multiplier = getComboMultiplier();
+    if (multiplier > bestComboMultiplier) bestComboMultiplier = multiplier;
+
     // Add credits for the kill
-    const creditValue = CONFIG.economy.creditsPerKill[enemyType] || 10;
+    const creditValue = Math.round((CONFIG.economy.creditsPerKill[enemyType] || 10) * multiplier);
     addCredits(creditValue, `kill_${enemyType}`);
     
     // Add score for the kill
-    const scoreValue = CONFIG.scoring.pointsPerKill[enemyType] || 100;
+    const scoreValue = Math.round((CONFIG.scoring.pointsPerKill[enemyType] || 100) * multiplier);
     addScore(scoreValue);
+
+    return { credits: creditValue, score: scoreValue, multiplier, chain: comboChain };
+}
+
+/**
+ * Run down the kill chain. Call once per frame while playing.
+ *
+ * @param {number} deltaTime - Seconds since the last frame
+ * @returns {boolean} True on the frame the chain breaks, so the caller can
+ *                    react to it ending rather than having to poll
+ */
+export function updateCombo(deltaTime) {
+    if (comboTimer <= 0) return false;
+
+    comboTimer -= deltaTime;
+    if (comboTimer > 0) return false;
+
+    comboTimer = 0;
+    comboChain = 0;
+
+    return true;
+}
+
+/**
+ * The multiplier the next kill would be paid at.
+ *
+ * A chain of one is not a chain, so it pays exactly the base value - the
+ * multiplier only starts climbing once kills are actually landing together.
+ *
+ * @returns {number} 1 or above, never past CONFIG.combo.max
+ */
+export function getComboMultiplier() {
+    if (comboChain <= 1) return 1;
+
+    return Math.min(CONFIG.combo.max, 1 + (comboChain - 1) * CONFIG.combo.step);
+}
+
+/**
+ * @returns {number} Kills in the current chain
+ */
+export function getComboChain() {
+    return comboChain;
+}
+
+/**
+ * @returns {number} Seconds left to extend the chain, 0 if it is not running
+ */
+export function getComboTimeRemaining() {
+    return Math.max(0, comboTimer);
+}
+
+/**
+ * @returns {number} The highest multiplier reached this run
+ */
+export function getBestComboMultiplier() {
+    return bestComboMultiplier;
 }
 
 /**

@@ -10,7 +10,9 @@ import {
     initEconomy, getCredits, getScore, addCredits, spendCredits, canAfford,
     recordKill, recordShot, recordHit, getAccuracy, awardWaveBonus,
     resetWaveTracking, getWaveSummary, getGameStats,
-    saveProgress, loadBestRun, clearProgress
+    saveProgress, loadBestRun, clearProgress,
+    updateCombo, getComboMultiplier, getComboChain, getComboTimeRemaining,
+    getBestComboMultiplier
 } from '../js/economy.js';
 import { CONFIG } from '../js/config.js';
 
@@ -103,6 +105,12 @@ describe('awardWaveBonus()', () => {
 describe('wave tracking', () => {
     it('reports only what was earned since the last reset', () => {
         recordKill('basic');
+
+        // Let the kill chain lapse, so the second kill is paid at the base rate
+        // rather than at a chain multiplier - this test is about the wave
+        // reset, not about the chain
+        updateCombo(CONFIG.combo.window + 0.1);
+
         resetWaveTracking();
         recordKill('fast');
 
@@ -111,6 +119,129 @@ describe('wave tracking', () => {
         expect(summary.score).toBe(CONFIG.scoring.pointsPerKill.fast);
         // Kills are a per-game total, deliberately not reset per wave
         expect(summary.kills).toBe(2);
+    });
+});
+
+// ==================== KILL CHAIN ====================
+
+/**
+ * Kills that land close together pay a rising multiplier. The point is not the
+ * extra income - it is that concentrated fire that deletes a group in two
+ * seconds now reads differently from the same kills spread across ten, which
+ * the game previously had no way to express.
+ */
+describe('the kill chain', () => {
+    /** Let the chain lapse completely. */
+    const lapse = () => updateCombo(CONFIG.combo.window + 0.1);
+
+    it('starts at no multiplier', () => {
+        expect(getComboMultiplier()).toBe(1);
+        expect(getComboChain()).toBe(0);
+    });
+
+    // A chain of one is not a chain
+    it('pays the base rate for a single kill', () => {
+        const award = recordKill('basic');
+
+        expect(award.multiplier).toBe(1);
+        expect(award.credits).toBe(CONFIG.economy.creditsPerKill.basic);
+    });
+
+    it('climbs with each kill inside the window', () => {
+        recordKill('basic');
+        const second = recordKill('basic');
+        const third = recordKill('basic');
+
+        expect(second.multiplier).toBeGreaterThan(1);
+        expect(third.multiplier).toBeGreaterThan(second.multiplier);
+    });
+
+    it('pays the multiplier on credits and score alike', () => {
+        recordKill('basic');
+        const second = recordKill('basic');
+
+        expect(second.credits).toBe(
+            Math.round(CONFIG.economy.creditsPerKill.basic * second.multiplier)
+        );
+        expect(second.score).toBe(
+            Math.round(CONFIG.scoring.pointsPerKill.basic * second.multiplier)
+        );
+    });
+
+    it('breaks when the window lapses', () => {
+        recordKill('basic');
+        recordKill('basic');
+        expect(getComboMultiplier()).toBeGreaterThan(1);
+
+        lapse();
+
+        expect(getComboMultiplier()).toBe(1);
+        expect(getComboChain()).toBe(0);
+    });
+
+    it('survives a gap shorter than the window', () => {
+        recordKill('basic');
+        updateCombo(CONFIG.combo.window * 0.5);
+
+        expect(recordKill('basic').multiplier).toBeGreaterThan(1);
+    });
+
+    it('reports the frame the chain breaks, once', () => {
+        recordKill('basic');
+
+        expect(updateCombo(CONFIG.combo.window * 0.5)).toBe(false);
+        expect(updateCombo(CONFIG.combo.window)).toBe(true);
+        expect(updateCombo(1)).toBe(false);
+    });
+
+    // Without a ceiling a late endless wave of forty enemies would pay a
+    // multiplier in the double digits and make every earlier wave irrelevant
+    it('never exceeds the configured ceiling', () => {
+        for (let i = 0; i < 50; i++) recordKill('basic');
+
+        expect(getComboMultiplier()).toBe(CONFIG.combo.max);
+    });
+
+    it('restarts cleanly after a break', () => {
+        for (let i = 0; i < 5; i++) recordKill('basic');
+        lapse();
+
+        expect(recordKill('basic').multiplier).toBe(1);
+    });
+
+    it('counts down the time remaining', () => {
+        recordKill('basic');
+        expect(getComboTimeRemaining()).toBeCloseTo(CONFIG.combo.window);
+
+        updateCombo(0.5);
+        expect(getComboTimeRemaining()).toBeCloseTo(CONFIG.combo.window - 0.5);
+    });
+
+    it('remembers the best multiplier reached this run', () => {
+        recordKill('basic');
+        recordKill('basic');
+        recordKill('basic');
+
+        const peak = getComboMultiplier();
+        lapse();
+
+        expect(getBestComboMultiplier()).toBe(peak);
+        expect(getComboMultiplier()).toBe(1);
+    });
+
+    it('is cleared by starting a new game', () => {
+        for (let i = 0; i < 5; i++) recordKill('basic');
+
+        initEconomy();
+
+        expect(getComboMultiplier()).toBe(1);
+        expect(getComboChain()).toBe(0);
+        expect(getBestComboMultiplier()).toBe(1);
+    });
+
+    it('does nothing when no chain is running', () => {
+        expect(updateCombo(1)).toBe(false);
+        expect(getComboTimeRemaining()).toBe(0);
     });
 });
 
