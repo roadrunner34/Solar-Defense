@@ -22,6 +22,10 @@
 import * as THREE from 'three';
 import { scene } from './scene.js';
 import { getPlatformConfig, CONFIG } from './config.js';
+import { getClosestEnemy } from './enemy.js';
+import { spendCredits, addCredits, canAfford } from './economy.js';
+import { createMuzzleSparks } from './particles.js';
+import { updateTurretAim } from './turret.js';
 
 // Store all active platforms
 export const platforms = [];
@@ -223,10 +227,10 @@ export function getPlacementConstraints() {
     };
 }
 
-// Shared geometries and materials (for performance - reuse instead of creating new ones)
-// We'll create these when we need them, similar to how enemies work
-const platformGeometries = {};
-const platformMaterials = {};
+/**
+ * Fraction of a platform's original cost returned when it is sold.
+ */
+const SELL_REFUND_RATE = 0.5;
 
 // ==================== PLACEMENT PREVIEW SYSTEM ====================
 
@@ -250,7 +254,8 @@ export const placementState = {
     active: false,           // Is placement mode active?
     selectedType: null,      // Which platform type is selected ('laserBattery' or 'missileLauncher')
     previewPosition: new THREE.Vector3(), // Current preview position
-    isValidPosition: false   // Is the current position valid for placement?
+    isValidPosition: false,  // Is the current position valid for placement?
+    lastError: null          // Why the last placement attempt failed, for the UI
 };
 
 /**
@@ -300,51 +305,20 @@ export function createPlacementPreview(type) {
  * @returns {THREE.Group} The preview mesh group
  */
 function createPreviewMesh(type) {
-    const previewGroup = new THREE.Group();
+    // Build the real platform, then make it ghostly. Going through the same
+    // builder means the preview can never drift out of sync with what actually
+    // gets placed - which is exactly what happened when the two were written
+    // as separate blocks of geometry.
+    const previewGroup = createPlatformMesh(type);
     
-    // Use the same geometry as the actual platform
-    // but with transparent materials
-    
-    // === BASE PLATFORM ===
-    const baseGeometry = new THREE.CylinderGeometry(2, 2.5, 0.5, 8);
-    const baseMaterial = new THREE.MeshPhongMaterial({
-        color: 0x00ff00,          // Start green (valid)
-        emissive: 0x003300,
-        transparent: true,
-        opacity: 0.5,             // Semi-transparent
-        flatShading: true
+    previewGroup.traverse((child) => {
+        if (child.isMesh && child.material) {
+            // Clone so tinting the preview never touches a placed platform
+            child.material = child.material.clone();
+            child.material.transparent = true;
+            child.material.opacity = 0.5;
+        }
     });
-    const base = new THREE.Mesh(baseGeometry, baseMaterial);
-    base.name = 'previewBase';
-    previewGroup.add(base);
-    
-    // === TURRET ===
-    const turretGeometry = new THREE.BoxGeometry(1.5, 1, 1.5);
-    const turretMaterial = new THREE.MeshPhongMaterial({
-        color: 0x00ff00,
-        emissive: 0x003300,
-        transparent: true,
-        opacity: 0.5
-    });
-    const turret = new THREE.Mesh(turretGeometry, turretMaterial);
-    turret.position.y = 0.75;
-    turret.name = 'previewTurret';
-    previewGroup.add(turret);
-    
-    // === BARREL ===
-    const barrelGeometry = new THREE.CylinderGeometry(0.2, 0.25, 2, 8);
-    const barrelMaterial = new THREE.MeshPhongMaterial({
-        color: 0x00ff00,
-        emissive: 0x003300,
-        transparent: true,
-        opacity: 0.5
-    });
-    const barrel = new THREE.Mesh(barrelGeometry, barrelMaterial);
-    barrel.rotation.x = Math.PI / 2;
-    barrel.position.z = 1;
-    barrel.position.y = 0.5;
-    barrel.name = 'previewBarrel';
-    turret.add(barrel);
     
     // Mark this as a preview (not a real platform)
     previewGroup.userData.isPreview = true;
@@ -446,9 +420,13 @@ function updatePreviewColor(isValid) {
     
     // Update all materials in the preview
     placementPreview.traverse((child) => {
-        if (child instanceof THREE.Mesh && child.material) {
+        if (child.isMesh && child.material) {
             child.material.color.setHex(color);
-            child.material.emissive.setHex(emissive);
+            // Only lit materials have an emissive channel - the glowing barrel
+            // tips and tube interiors are MeshBasicMaterial and have none
+            if (child.material.emissive) {
+                child.material.emissive.setHex(emissive);
+            }
         }
     });
     
@@ -514,9 +492,24 @@ export function confirmPlacement() {
     const validationResult = isValidPlacementPosition(placementState.previewPosition);
     
     if (!validationResult.valid) {
+        placementState.lastError = validationResult.reason;
         console.log(`Cannot place platform: ${validationResult.reason}`);
         return null;
     }
+    
+    // Charge for the platform. spendCredits checks the balance and debits in
+    // one step, so there is no window where the check passes but the debit
+    // fails. Platforms used to be free - cost was read from the config into the
+    // platform object and then never used.
+    const config = getPlatformConfig(placementState.selectedType);
+    
+    if (!spendCredits(config.cost)) {
+        placementState.lastError = `Need ${config.cost} credits`;
+        console.log(`Cannot place platform: insufficient credits (need ${config.cost})`);
+        return null;
+    }
+    
+    placementState.lastError = null;
     
     // Create the actual platform
     const platform = createPlatform(
@@ -587,6 +580,8 @@ export function createPlatform(type, position) {
         range: config.range,
         fireRate: config.fireRate,
         cost: config.cost,
+        projectileSpeed: config.projectileSpeed,
+        rotationSpeed: config.rotationSpeed,
         
         // Combat state (will be used in Task 3.x)
         timeSinceLastShot: 0,    // Track firing cooldown
@@ -623,47 +618,193 @@ export function createPlatform(type, position) {
  * @returns {THREE.Group} The platform mesh group
  */
 function createPlatformMesh(type) {
-    // Use a Group to combine multiple meshes (like starbase does)
+    return type === 'missileLauncher'
+        ? createMissileLauncherMesh()
+        : createLaserBatteryMesh();
+}
+
+/**
+ * Builds the Laser Battery mesh.
+ *
+ * Read as: light, fast, energy-based. Slim octagonal base, compact turret and
+ * twin thin barrels with glowing cyan tips - echoing the cyan of the lasers it
+ * fires, and clearly different from the Missile Launcher's bulk.
+ *
+ * @returns {THREE.Group} The platform mesh group
+ */
+function createLaserBatteryMesh() {
     const platformGroup = new THREE.Group();
     
-    // === BASE PLATFORM ===
-    // A simple cylinder as the base
-    const baseGeometry = new THREE.CylinderGeometry(2, 2.5, 0.5, 8);
+    // === BASE ===
+    const baseGeometry = new THREE.CylinderGeometry(1.8, 2.2, 0.5, 8);
     const baseMaterial = new THREE.MeshPhongMaterial({
-        color: 0x666666,          // Gray base
-        emissive: 0x111111,      // Slight glow
-        flatShading: true
+        color: 0x3a4a5a,          // Cool blue-grey
+        emissive: 0x0a1520,
+        flatShading: true,
+        shininess: 40
     });
-    const base = new THREE.Mesh(baseGeometry, baseMaterial);
-    platformGroup.add(base);
+    platformGroup.add(new THREE.Mesh(baseGeometry, baseMaterial));
     
-    // === TURRET ===
-    // A simple box on top (will rotate to aim in Task 3.2)
-    const turretGeometry = new THREE.BoxGeometry(1.5, 1, 1.5);
-    const turretMaterial = new THREE.MeshPhongMaterial({
-        color: 0x888888,          // Slightly lighter gray
-        emissive: 0x222222
+    // Cyan accent ring around the base, tying it to its laser colour
+    const ringGeometry = new THREE.TorusGeometry(1.9, 0.08, 8, 24);
+    const ringMaterial = new THREE.MeshBasicMaterial({
+        color: new THREE.Color(0, 0.8, 1.0),
+        transparent: true,
+        opacity: 0.6
     });
-    const turret = new THREE.Mesh(turretGeometry, turretMaterial);
-    turret.position.y = 0.75;    // On top of base
-    turret.name = 'turret';       // Named for easy access later
+    const accentRing = new THREE.Mesh(ringGeometry, ringMaterial);
+    accentRing.rotation.x = Math.PI / 2;
+    accentRing.position.y = 0.28;
+    platformGroup.add(accentRing);
+    
+    // === TURRET (rotates to aim) ===
+    const turret = new THREE.Group();
+    turret.position.y = 0.7;
+    turret.name = 'turret';
     platformGroup.add(turret);
     
-    // === BARREL ===
-    // A simple cylinder extending from turret
-    const barrelGeometry = new THREE.CylinderGeometry(0.2, 0.25, 2, 8);
-    const barrelMaterial = new THREE.MeshPhongMaterial({
-        color: 0x555555,          // Darker gray
-        emissive: 0x111111
+    const housingGeometry = new THREE.CylinderGeometry(0.7, 0.9, 0.8, 8);
+    const housingMaterial = new THREE.MeshPhongMaterial({
+        color: 0x5a6a7a,
+        emissive: 0x121a22,
+        shininess: 60
     });
-    const barrel = new THREE.Mesh(barrelGeometry, barrelMaterial);
-    barrel.rotation.x = Math.PI / 2; // Point forward (Z direction)
-    barrel.position.z = 1;        // Extend from turret
-    barrel.position.y = 0.5;
-    barrel.name = 'barrel';       // Named for easy access later
-    turret.add(barrel);
+    turret.add(new THREE.Mesh(housingGeometry, housingMaterial));
+    
+    // === TWIN BARRELS ===
+    const barrels = new THREE.Group();
+    barrels.name = 'barrel';
+    turret.add(barrels);
+    
+    const barrelGeometry = new THREE.CylinderGeometry(0.12, 0.14, 2.2, 8);
+    const barrelMaterial = new THREE.MeshPhongMaterial({
+        color: 0x8a9aaa,
+        emissive: 0x1a2228,
+        shininess: 80
+    });
+    const emitterGeometry = new THREE.SphereGeometry(0.15, 8, 8);
+    const emitterMaterial = new THREE.MeshBasicMaterial({
+        color: new THREE.Color(0, 1.6, 2.0) // HDR cyan, picked up by bloom
+    });
+    
+    for (const offsetX of [-0.28, 0.28]) {
+        const barrel = new THREE.Mesh(barrelGeometry, barrelMaterial);
+        barrel.rotation.x = Math.PI / 2;
+        barrel.position.set(offsetX, 0.1, 1.1);
+        barrels.add(barrel);
+        
+        const emitter = new THREE.Mesh(emitterGeometry, emitterMaterial);
+        emitter.position.set(offsetX, 0.1, 2.2);
+        barrels.add(emitter);
+    }
+    
+    // Where projectiles spawn, between the two barrels
+    addMuzzle(barrels, 0.1, 2.3);
     
     return platformGroup;
+}
+
+/**
+ * Builds the Missile Launcher mesh.
+ *
+ * Read as: heavy, slow, explosive. Wider hexagonal base, boxy launcher housing
+ * and a visible 2x2 bank of tubes with hot orange interiors - unmistakably
+ * different in silhouette and colour from the Laser Battery.
+ *
+ * @returns {THREE.Group} The platform mesh group
+ */
+function createMissileLauncherMesh() {
+    const platformGroup = new THREE.Group();
+    
+    // === BASE ===
+    const baseGeometry = new THREE.CylinderGeometry(2.2, 2.7, 0.6, 6);
+    const baseMaterial = new THREE.MeshPhongMaterial({
+        color: 0x5a4a3a,          // Warm rust-grey
+        emissive: 0x1a1008,
+        flatShading: true
+    });
+    platformGroup.add(new THREE.Mesh(baseGeometry, baseMaterial));
+    
+    // Stabiliser legs, selling the weight of the thing
+    const legGeometry = new THREE.BoxGeometry(0.3, 0.4, 1.0);
+    const legMaterial = new THREE.MeshPhongMaterial({
+        color: 0x4a3a2a,
+        emissive: 0x0a0804
+    });
+    for (let i = 0; i < 3; i++) {
+        const angle = (i / 3) * Math.PI * 2;
+        const leg = new THREE.Mesh(legGeometry, legMaterial);
+        leg.position.set(Math.cos(angle) * 2.2, -0.1, Math.sin(angle) * 2.2);
+        leg.rotation.y = -angle;
+        platformGroup.add(leg);
+    }
+    
+    // === TURRET (rotates to aim) ===
+    const turret = new THREE.Group();
+    turret.position.y = 0.8;
+    turret.name = 'turret';
+    platformGroup.add(turret);
+    
+    const housingGeometry = new THREE.BoxGeometry(1.8, 1.0, 1.4);
+    const housingMaterial = new THREE.MeshPhongMaterial({
+        color: 0x6a5a4a,
+        emissive: 0x181008,
+        flatShading: true
+    });
+    turret.add(new THREE.Mesh(housingGeometry, housingMaterial));
+    
+    // === MISSILE TUBE BANK (2x2) ===
+    const tubes = new THREE.Group();
+    tubes.name = 'barrel';
+    turret.add(tubes);
+    
+    const tubeGeometry = new THREE.CylinderGeometry(0.26, 0.26, 1.6, 8);
+    const tubeMaterial = new THREE.MeshPhongMaterial({
+        color: 0x7a6a5a,
+        emissive: 0x1a1208,
+        flatShading: true
+    });
+    const tubeInteriorGeometry = new THREE.CircleGeometry(0.2, 8);
+    const tubeInteriorMaterial = new THREE.MeshBasicMaterial({
+        color: new THREE.Color(2.0, 0.7, 0.1), // HDR orange, picked up by bloom
+        side: THREE.DoubleSide
+    });
+    
+    for (const offsetX of [-0.32, 0.32]) {
+        for (const offsetY of [-0.28, 0.28]) {
+            const tube = new THREE.Mesh(tubeGeometry, tubeMaterial);
+            tube.rotation.x = Math.PI / 2;
+            tube.position.set(offsetX, offsetY, 0.9);
+            tubes.add(tube);
+            
+            const interior = new THREE.Mesh(tubeInteriorGeometry, tubeInteriorMaterial);
+            interior.position.set(offsetX, offsetY, 1.71);
+            tubes.add(interior);
+        }
+    }
+    
+    // Where projectiles spawn, at the centre of the tube bank
+    addMuzzle(tubes, 0, 1.8);
+    
+    return platformGroup;
+}
+
+/**
+ * Adds an empty marker at the point projectiles should spawn from.
+ *
+ * Using a marker object rather than per-type offset constants means the firing
+ * code does not need to know which platform type it is dealing with - it just
+ * asks the mesh where its muzzle is.
+ *
+ * @param {THREE.Object3D} parent - The barrel group to attach to
+ * @param {number} y - Local height of the muzzle
+ * @param {number} z - Local forward offset of the muzzle
+ */
+function addMuzzle(parent, y, z) {
+    const muzzle = new THREE.Object3D();
+    muzzle.name = 'muzzle';
+    muzzle.position.set(0, y, z);
+    parent.add(muzzle);
 }
 
 /**
@@ -695,6 +836,117 @@ export function removePlatform(platform) {
     
     // Mark as not alive
     platform.alive = false;
+}
+
+// ==================== ECONOMY ====================
+
+/**
+ * Whether the player can currently afford a platform type.
+ *
+ * @param {string} type - Platform type
+ * @returns {boolean} True if the player has enough credits
+ */
+export function canAffordPlatform(type) {
+    return canAfford(getPlatformConfig(type).cost);
+}
+
+/**
+ * Sells a platform, refunding part of its cost.
+ *
+ * @param {object} platform - The platform to sell
+ * @returns {number} Credits refunded (0 if the platform could not be sold)
+ */
+export function sellPlatform(platform) {
+    if (!platform || !platform.alive) return 0;
+    
+    const refund = Math.floor(platform.cost * SELL_REFUND_RATE);
+    addCredits(refund, `sell_${platform.type}`);
+    removePlatform(platform);
+    
+    return refund;
+}
+
+// ==================== COMBAT ====================
+
+/**
+ * Finds the closest living enemy inside a platform's range.
+ *
+ * @param {object} platform - The platform doing the looking
+ * @returns {object|null} The enemy to shoot at, or null if none are in range
+ */
+export function findClosestEnemyInRange(platform) {
+    return getClosestEnemy(platform.position, platform.range);
+}
+
+/**
+ * Builds the projectile a platform fires at its target.
+ *
+ * Returns data rather than creating the projectile directly, matching how the
+ * starbase works: main.js owns projectile creation, which keeps platform.js
+ * from depending on projectile.js.
+ *
+ * @param {object} platform - The firing platform
+ * @param {object} target - The enemy being shot at
+ * @returns {object} Projectile data for createProjectile()
+ */
+export function firePlatformProjectile(platform, target) {
+    // The mesh carries a 'muzzle' marker at the barrel tip, so this works for
+    // any platform type without knowing its geometry
+    const muzzle = platform.mesh.getObjectByName('muzzle');
+    const barrelTip = muzzle
+        ? muzzle.getWorldPosition(new THREE.Vector3())
+        : platform.position.clone();
+    
+    const direction = new THREE.Vector3()
+        .subVectors(target.mesh.position, barrelTip)
+        .normalize();
+    
+    createMuzzleSparks(barrelTip, direction);
+    
+    return {
+        position: barrelTip,
+        direction,
+        damage: platform.damage,
+        speed: platform.projectileSpeed,
+        source: `platform:${platform.type}`
+    };
+}
+
+/**
+ * Updates every platform: acquire a target, turn toward it, and fire.
+ *
+ * @param {number} deltaTime - Time since last frame in seconds
+ * @returns {Array<object>} Projectile data for every platform that fired
+ */
+export function updatePlatforms(deltaTime) {
+    const firedProjectiles = [];
+    
+    for (const platform of platforms) {
+        if (!platform.alive) continue;
+        
+        platform.timeSinceLastShot += deltaTime;
+        
+        const target = findClosestEnemyInRange(platform);
+        platform.currentTarget = target;
+        
+        if (!target) continue;
+        
+        const turret = platform.mesh.getObjectByName('turret');
+        const isAimed = updateTurretAim(
+            turret,
+            platform.position,
+            target.mesh.position,
+            platform.rotationSpeed,
+            deltaTime
+        );
+        
+        if (isAimed && platform.timeSinceLastShot >= 1 / platform.fireRate) {
+            platform.timeSinceLastShot = 0;
+            firedProjectiles.push(firePlatformProjectile(platform, target));
+        }
+    }
+    
+    return firedProjectiles;
 }
 
 /**

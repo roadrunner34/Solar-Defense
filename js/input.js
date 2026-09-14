@@ -13,6 +13,7 @@
 
 import * as THREE from 'three';
 import { camera } from './camera.js';
+import { showFloatingText } from './ui.js';
 import { 
     placementState, 
     updatePlacementPreview, 
@@ -320,9 +321,13 @@ function handlePlacementClick() {
     if (platform) {
         console.log(`Platform placed successfully: ${platform.type}`);
         // Platform was placed - preview is automatically removed
-    } else {
-        console.log('Placement failed - invalid position');
-        // Placement failed - preview stays so player can try again
+        return;
+    }
+    
+    // Placement failed - the preview stays so the player can try again, and we
+    // say why at the cursor rather than only in the console
+    if (placementState.lastError) {
+        showFloatingText(placementState.lastError, inputState.mouseX, inputState.mouseY, '#ff6666');
     }
 }
 

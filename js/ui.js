@@ -23,8 +23,9 @@
  * - Easing: How the animation accelerates/decelerates (e.g., "power2.out")
  */
 
-import { getCredits, getScore, getAccuracy, getGameStats } from './economy.js';
+import { getCredits, getScore, getAccuracy, getGameStats, canAfford } from './economy.js';
 import { getEnemyCount } from './enemy.js';
+import { CONFIG } from './config.js';
 import gsap from 'gsap';
 
 // Cache DOM element references (faster than querying each frame)
@@ -58,6 +59,94 @@ export function initUI() {
     // Final score displays
     elements.finalScoreVictory = document.getElementById('final-score-victory');
     elements.finalScoreDefeat = document.getElementById('final-score-defeat');
+    
+    // Build menu
+    elements.buildMenu = document.getElementById('build-menu');
+}
+
+// ==================== BUILD MENU ====================
+
+/**
+ * Turns a config key into a readable name: laserBattery -> Laser Battery.
+ *
+ * Derived rather than looked up in a table so a new platform type added to the
+ * config needs no corresponding UI change.
+ *
+ * @param {string} type - Platform type key
+ * @returns {string} Display name
+ */
+function formatPlatformName(type) {
+    return type
+        .replace(/([A-Z])/g, ' $1')
+        .replace(/^./, character => character.toUpperCase());
+}
+
+/**
+ * Returns the number key that selects a platform type.
+ *
+ * Hotkeys follow config order, so the nth platform type is on the nth number
+ * key. main.js resolves key presses the same way.
+ *
+ * @param {string} type - Platform type key
+ * @returns {string} The hotkey character
+ */
+export function getPlatformHotkey(type) {
+    return String(Object.keys(CONFIG.platforms).indexOf(type) + 1);
+}
+
+/**
+ * Build the platform build menu.
+ *
+ * Buttons are generated from CONFIG.platforms rather than written into the
+ * HTML, so the menu always reflects the configured platform types and their
+ * real stats.
+ *
+ * @param {Function} onSelect - Called with a platform type when one is chosen
+ */
+export function initBuildMenu(onSelect) {
+    if (!elements.buildMenu) return;
+    
+    elements.buildMenu.innerHTML = '<h3>Build</h3>';
+    
+    for (const [type, config] of Object.entries(CONFIG.platforms)) {
+        const button = document.createElement('button');
+        button.className = 'build-option';
+        button.dataset.type = type;
+        
+        button.innerHTML = `
+            <span class="build-option-name">${formatPlatformName(type)}</span>
+            <span class="build-option-key">${getPlatformHotkey(type)}</span>
+            <span class="build-option-cost">${config.cost} cr</span>
+            <span class="build-option-stats">${config.damage} dmg &middot; ${config.range} range</span>
+        `;
+        
+        button.addEventListener('click', () => onSelect(type));
+        elements.buildMenu.appendChild(button);
+    }
+    
+    updateBuildMenu();
+}
+
+/**
+ * Refresh the build menu against the current balance and selection.
+ *
+ * Called every frame from updateHUD, so buttons grey out the moment credits
+ * drop below a platform's cost.
+ *
+ * @param {string|null} selectedType - Platform type currently being placed
+ */
+export function updateBuildMenu(selectedType = null) {
+    if (!elements.buildMenu) return;
+    
+    for (const button of elements.buildMenu.querySelectorAll('.build-option')) {
+        const config = CONFIG.platforms[button.dataset.type];
+        if (!config) continue;
+        
+        const affordable = canAfford(config.cost);
+        button.classList.toggle('unaffordable', !affordable);
+        button.classList.toggle('selected', button.dataset.type === selectedType);
+        button.disabled = !affordable;
+    }
 }
 
 /**
@@ -104,7 +193,7 @@ export function setupUICallbacks(callbacks) {
  * Call this every frame or when values change
  * @param {number} waveNumber - Current wave number
  */
-export function updateHUD(waveNumber) {
+export function updateHUD(waveNumber, selectedPlatformType = null) {
     // Update wave number
     if (elements.waveNumber) {
         elements.waveNumber.textContent = waveNumber;
@@ -124,6 +213,9 @@ export function updateHUD(waveNumber) {
     if (elements.credits) {
         elements.credits.textContent = formatNumber(getCredits());
     }
+    
+    // Grey out platforms the player can no longer afford
+    updateBuildMenu(selectedPlatformType);
 }
 
 /**

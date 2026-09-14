@@ -267,3 +267,98 @@ body {
     font-size: 14px;
     line-height: 1.5;
 }
+
+/* ==================== BUILD MENU ====================
+ *
+ * Lives inside #hud, which sets pointer-events: none so clicks reach the 3D
+ * canvas. The menu must therefore re-enable pointer events on itself, or its
+ * buttons look right and do nothing. */
+#build-menu {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    width: 215px;
+    padding: 12px;
+    pointer-events: auto;
+    background: rgba(0, 20, 40, 0.8);
+    border: 1px solid rgba(0, 150, 255, 0.5);
+    border-radius: 5px;
+}
+
+#build-menu h3 {
+    margin-bottom: 10px;
+    color: #00ffff;
+    font-size: 14px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.build-option {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 2px 8px;
+    width: 100%;
+    margin-bottom: 8px;
+    padding: 8px 10px;
+    text-align: left;
+    color: #fff;
+    background: rgba(0, 60, 110, 0.6);
+    border: 1px solid rgba(0, 150, 255, 0.4);
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.build-option:last-child {
+    margin-bottom: 0;
+}
+
+.build-option:hover:not(:disabled) {
+    background: rgba(0, 90, 150, 0.8);
+    border-color: #00aaff;
+}
+
+.build-option.selected {
+    background: rgba(0, 120, 180, 0.9);
+    border-color: #00ffff;
+    box-shadow: 0 0 12px rgba(0, 200, 255, 0.5);
+}
+
+/* Greyed out rather than hidden, so players can still see what they are
+ * saving toward */
+.build-option.unaffordable {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.build-option-name {
+    font-size: 13px;
+    font-weight: bold;
+}
+
+.build-option-key {
+    grid-row: span 2;
+    align-self: center;
+    min-width: 20px;
+    padding: 2px 6px;
+    color: #00ffff;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(0, 200, 255, 0.4);
+    border-radius: 3px;
+    font-family: monospace;
+    font-size: 12px;
+    text-align: center;
+}
+
+.build-option-cost {
+    color: #ffff00;
+    font-size: 12px;
+}
+
+.build-option-stats {
+    grid-column: 1 / -1;
+    color: #8ab;
+    font-size: 11px;
+}

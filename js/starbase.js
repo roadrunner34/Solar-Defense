@@ -20,9 +20,8 @@ import { scene } from './scene.js';
 import { CONFIG } from './config.js';
 import { getClosestEnemy } from './enemy.js';
 
-// Import smooth animation utilities
-// dampAngle provides frame-rate independent smooth rotation
-import { dampAngle } from './mathUtils.js';
+// Shared turret aiming, used by the starbase and every platform
+import { updateTurretAim } from './turret.js';
 
 // Import particle effects for muzzle sparks
 import { createMuzzleSparks } from './particles.js';
@@ -400,39 +399,18 @@ export function updateStarbase(deltaTime) {
     currentTarget = getClosestEnemy(starbasePosition, stats.range);
     
     // === AUTO-AIM ===
-    // If we have a target, rotate to face it
+    // If we have a target, rotate to face it. Platforms use the same helper,
+    // so the starbase and every platform track targets identically.
     let isAimed = false;
     
     if (currentTarget && currentTarget.alive) {
-        // Calculate direction to target
-        const targetPosition = currentTarget.mesh.position;
-        const directionToTarget = new THREE.Vector3()
-            .subVectors(targetPosition, starbasePosition);
-        
-        // Calculate the angle we need to face (on the Y axis / horizontal plane)
-        // atan2 gives us the angle from the Z-axis to our target
-        const targetAngle = Math.atan2(directionToTarget.x, directionToTarget.z);
-        
-        // === SMOOTH ROTATION WITH DAMPING ===
-        // Use dampAngle for buttery-smooth, frame-rate independent rotation!
-        // 
-        // The 'lambda' parameter (12 here) controls how fast the turret tracks:
-        // - Lower values (5-8): Slow, dramatic tracking
-        // - Medium values (10-15): Responsive but smooth
-        // - Higher values (20+): Snappy, almost instant
-        //
-        // dampAngle automatically handles the angle wrapping problem (where
-        // -180° and 180° are the same angle) and always takes the shortest path.
-        const lambda = stats.rotationSpeed * 3; // Scale rotation speed to lambda
-        turret.rotation.y = dampAngle(turret.rotation.y, targetAngle, lambda, deltaTime);
-        
-        // Calculate remaining angle difference for aim check
-        let angleDiff = targetAngle - turret.rotation.y;
-        while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-        while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-        
-        // Consider "aimed" if we're within 5 degrees (0.087 radians)
-        isAimed = Math.abs(angleDiff) < 0.087;
+        isAimed = updateTurretAim(
+            turret,
+            starbasePosition,
+            currentTarget.mesh.position,
+            stats.rotationSpeed,
+            deltaTime
+        );
     }
     
     // === FIRING ===
@@ -602,6 +580,7 @@ export function resetStarbaseStats() {
         starbase.userData.stats = stats;
     }
     currentTarget = null;
+    timeSinceLastShot = 0; // Start each game on a fresh cooldown
     animationTime = 0; // Reset animation time for visual effects
 }
 

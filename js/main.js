@@ -34,12 +34,12 @@ import { createStarbase, updateStarbase, resetStarbaseStats } from './starbase.j
 import { createProjectile, updateProjectiles, clearProjectiles, createHitEffect } from './projectile.js';
 import { initParticles, updateParticles, createEnemyDeathEffect, createMuzzleSparks } from './particles.js';
 import { updateEffects, clearEffects } from './effects.js';
-import { clearAllPlatforms } from './platform.js';
+import { updatePlatforms, clearAllPlatforms, placementState } from './platform.js';
 import { initEconomy, recordKill, recordShot, recordHit, awardWaveBonus,
          resetWaveTracking, getWaveSummary, getCredits, getScore } from './economy.js';
 import { initUI, setupUICallbacks, updateHUD, showScreen, hideAllScreens,
          setHUDVisible, showDamageNumber, showFloatingText, showWaveAnnouncement,
-         showWaveSummary, worldToScreen } from './ui.js';
+         showWaveSummary, worldToScreen, initBuildMenu } from './ui.js';
 import { CONFIG, getWaveConfig } from './config.js';
 
 // ==================== GAME STATE ====================
@@ -125,6 +125,9 @@ function init() {
         onResume: resumeGame
     });
     
+    // Build the platform build menu from the configured platform types
+    initBuildMenu(enterPlacementMode);
+    
     // Handle window resize
     window.addEventListener('resize', onWindowResize);
     
@@ -144,17 +147,16 @@ function init() {
             }
         }
         
-        // ==================== TEMPORARY DEBUG KEYS ====================
-        // These allow testing placement without the full UI
-        // Press 1 for Laser Battery, 2 for Missile Launcher
-        // TODO: Remove these when UI is implemented (Task 5.x)
+        // ==================== BUILD HOTKEYS ====================
+        // Number keys mirror the build menu, in config order: the nth platform
+        // type is on the nth number key. ui.js labels the buttons the same way,
+        // so adding a platform type to the config wires up its hotkey too.
         if (currentState === GameState.PLAYING) {
-            if (e.key === '1') {
-                enterPlacementMode('laserBattery');
-                console.log('DEBUG: Press 1 - Laser Battery placement mode');
-            } else if (e.key === '2') {
-                enterPlacementMode('missileLauncher');
-                console.log('DEBUG: Press 2 - Missile Launcher placement mode');
+            const platformTypes = Object.keys(CONFIG.platforms);
+            const index = Number(e.key) - 1;
+            
+            if (Number.isInteger(index) && index >= 0 && index < platformTypes.length) {
+                enterPlacementMode(platformTypes[index]);
             }
         }
     });
@@ -622,6 +624,14 @@ function update(deltaTime) {
         recordShot(); // Track for accuracy
     }
     
+    // --- PLATFORMS ---
+    // Deployed platforms acquire their own targets and fire independently,
+    // returning projectile data in the same shape the starbase does
+    updatePlatforms(deltaTime).forEach(platformProjectile => {
+        createProjectile(platformProjectile);
+        recordShot(); // Track for accuracy
+    });
+    
     // --- PROJECTILES ---
     const hits = updateProjectiles(deltaTime);
     
@@ -664,7 +674,7 @@ function update(deltaTime) {
     projectHealthBars(camera);
     
     // --- UI ---
-    updateHUD(currentWave);
+    updateHUD(currentWave, placementState.selectedType);
     
     // --- WIN CONDITION ---
     // Check if wave is complete (all enemies spawned and destroyed)

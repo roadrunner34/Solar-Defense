@@ -29,20 +29,29 @@ export const CONFIG = {
     },
 
     // ==================== PLATFORMS ====================
+    // The two types are deliberately opposed: the Laser Battery is cheap, fast
+    // firing and quick to turn but weak per shot, while the Missile Launcher
+    // hits hard at long range but is slow to fire and slow to track. Fast
+    // enemies can outrun a Missile Launcher's aim, which is what makes mixing
+    // the two worthwhile.
     platforms: {
         // Laser Battery - Fast-firing, medium-range weapon platform
         laserBattery: {
             damage: 20,            // Damage per shot (lower than starbase but faster firing)
             range: 80,              // Maximum firing range (units)
             fireRate: 1.2,          // Shots per second (faster than starbase)
-            cost: 50                // Credits required to build
+            cost: 50,               // Credits required to build
+            projectileSpeed: 60,    // Light, fast bolts - quicker than the starbase's 50
+            rotationSpeed: 3.0      // Turns quickly, so it can track fast enemies
         },
         // Missile Launcher - High-damage, long-range weapon platform
         missileLauncher: {
             damage: 40,            // Damage per shot (higher than laser battery)
             range: 100,             // Maximum firing range (units, same as starbase)
             fireRate: 0.8,          // Shots per second (slower than laser battery)
-            cost: 100               // Credits required to build (more expensive)
+            cost: 100,              // Credits required to build (more expensive)
+            projectileSpeed: 35,    // Heavy ordnance - slower than the starbase's 50
+            rotationSpeed: 1.5      // Turns slowly, so fast enemies can outrun its aim
         }
     },
 
