@@ -77,6 +77,7 @@ export function initUI() {
     elements.selectionName = document.getElementById('selection-name');
     elements.selectionStats = document.getElementById('selection-stats');
     elements.selectionUpgrades = document.getElementById('selection-upgrades');
+    elements.selectionTargeting = document.getElementById('selection-targeting');
     elements.selectionSell = document.getElementById('selection-sell');
     elements.selectionClose = document.getElementById('selection-close');
 
@@ -1126,7 +1127,8 @@ export function worldToScreen(position, camera) {
 let selectionCallbacks = {
     onUpgrade: null,
     onSell: null,
-    onClose: null
+    onClose: null,
+    onTargeting: null
 };
 
 /**
@@ -1140,6 +1142,7 @@ let selectionCallbacks = {
  * @param {Function} [callbacks.onUpgrade] - Receives the upgrade id
  * @param {Function} [callbacks.onSell]
  * @param {Function} [callbacks.onClose]
+ * @param {Function} [callbacks.onTargeting] - Receives the targeting mode id
  */
 export function setSelectionCallbacks(callbacks = {}) {
     selectionCallbacks = { ...selectionCallbacks, ...callbacks };
@@ -1167,6 +1170,9 @@ export function setSelectionCallbacks(callbacks = {}) {
  * @param {Array<{label: string, value: string, upgraded?: boolean}>} view.stats
  * @param {Array<{id: string, label: string, cost: number,
  *                affordable: boolean, maxed: boolean}>} [view.upgrades]
+ * @param {{current: string, modes: Array<{id: string, label: string}>}}
+ *        [view.targeting] - Targeting priority, omitted for things that do not
+ *        choose their own target
  * @param {number|null} [view.sellValue] - Refund, or null if it cannot be sold
  */
 export function showSelectionPanel(view) {
@@ -1179,6 +1185,7 @@ export function showSelectionPanel(view) {
     }
 
     renderSelectionStats(view.stats || []);
+    renderSelectionTargeting(view.targeting || null);
     renderSelectionUpgrades(view.upgrades || []);
 
     if (elements.selectionSell) {
@@ -1212,6 +1219,58 @@ function renderSelectionStats(stats) {
 
         elements.selectionStats.append(label, value);
     });
+}
+
+/**
+ * Render the targeting priority control as a row of segmented buttons.
+ *
+ * A row rather than a <select> because the whole point is that switching is
+ * cheap - this is a setting the player is meant to flip mid-wave when they see
+ * a Missile Launcher wasting its reload on trash, and a dropdown makes that
+ * three interactions instead of one.
+ *
+ * @param {{current: string, modes: Array<object>}|null} targeting
+ */
+function renderSelectionTargeting(targeting) {
+    if (!elements.selectionTargeting) return;
+
+    elements.selectionTargeting.innerHTML = '';
+
+    // Absent for anything that does not choose its own target
+    if (!targeting || !targeting.modes || targeting.modes.length === 0) {
+        elements.selectionTargeting.hidden = true;
+        return;
+    }
+
+    elements.selectionTargeting.hidden = false;
+
+    const label = document.createElement('div');
+    label.className = 'targeting-label';
+    label.textContent = 'Target';
+    elements.selectionTargeting.appendChild(label);
+
+    const row = document.createElement('div');
+    row.className = 'targeting-row';
+
+    targeting.modes.forEach((mode) => {
+        const button = document.createElement('button');
+        button.className = 'targeting-button';
+        button.dataset.targeting = mode.id;
+        button.textContent = mode.label;
+        button.setAttribute('aria-pressed', String(mode.id === targeting.current));
+
+        if (mode.id === targeting.current) button.classList.add('selected');
+
+        // Safe to attach per render: this row is rebuilt each time, so every
+        // button is a fresh element that has never carried a listener
+        button.addEventListener('click', () => {
+            if (selectionCallbacks.onTargeting) selectionCallbacks.onTargeting(mode.id);
+        });
+
+        row.appendChild(button);
+    });
+
+    elements.selectionTargeting.appendChild(row);
 }
 
 /**

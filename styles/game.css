@@ -407,6 +407,65 @@ body {
     color: var(--good);
 }
 
+/* ==================== TARGETING PRIORITY ==================== */
+
+/* A segmented row rather than a dropdown, because the whole value of this
+   control is that switching is cheap - it is meant to be flipped mid-wave when
+   you notice a Missile Launcher wasting its reload on trash. A <select> would
+   make that three interactions instead of one. */
+
+#selection-targeting {
+    margin-bottom: var(--gap-2);
+}
+
+.targeting-label {
+    margin-bottom: var(--gap-1);
+    color: var(--accent-dim);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+}
+
+.targeting-row {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--gap-1);
+}
+
+.targeting-button {
+    padding: 5px 4px;
+    color: var(--text-dim);
+    background: var(--surface-2);
+    border: 1px solid var(--accent-line);
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 10px;
+    letter-spacing: 0.3px;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.targeting-button:hover {
+    color: var(--text);
+    background: var(--surface-3);
+    border-color: var(--accent);
+}
+
+/* The active mode gets the accent fill, so which priority is live is readable
+   at a glance rather than requiring a comparison across four buttons */
+.targeting-button.selected {
+    color: var(--void);
+    background: var(--accent);
+    border-color: var(--accent-bright);
+    font-weight: 700;
+}
+
+.targeting-button:focus-visible {
+    outline: 2px solid var(--accent-bright);
+    outline-offset: 1px;
+}
+
 .upgrade-list {
     display: flex;
     flex-direction: column;

@@ -17,7 +17,7 @@ import { initEnemies, spawnEnemy, clearEnemies } from '../js/enemy.js';
 import { initParticles } from '../js/particles.js';
 import {
     createPlatform, platforms, clearAllPlatforms, updatePlatforms,
-    findClosestEnemyInRange, firePlatformProjectile, canAffordPlatform,
+    findTarget, firePlatformProjectile, canAffordPlatform,
     sellPlatform, createPlacementPreview, updatePlacementPreview,
     confirmPlacement, removePlacementPreview, placementState, getSellValue
 } from '../js/platform.js';
@@ -44,17 +44,17 @@ beforeEach(() => {
     initEconomy();
 });
 
-describe('findClosestEnemyInRange()', () => {
+describe('findTarget()', () => {
     it('returns null when nothing is in range', () => {
         const platform = createPlatform('laserBattery', new THREE.Vector3(20, 0, 0));
         enemyAt(500, 0, 0);
 
-        expect(findClosestEnemyInRange(platform)).toBe(null);
+        expect(findTarget(platform)).toBe(null);
     });
 
     it('returns null when there are no enemies at all', () => {
         const platform = createPlatform('laserBattery', new THREE.Vector3(20, 0, 0));
-        expect(findClosestEnemyInRange(platform)).toBe(null);
+        expect(findTarget(platform)).toBe(null);
     });
 
     it('returns the closest of several enemies in range', () => {
@@ -62,7 +62,7 @@ describe('findClosestEnemyInRange()', () => {
         const near = enemyAt(25, 0, 0);
         enemyAt(60, 0, 0);
 
-        expect(findClosestEnemyInRange(platform)).toBe(near);
+        expect(findTarget(platform)).toBe(near);
     });
 
     it('respects each platform type\'s range', () => {
@@ -71,11 +71,11 @@ describe('findClosestEnemyInRange()', () => {
 
         // 90 units from the laser (range 80) but inside the missile's range 100
         enemyAt(20 + 90, 0, 0);
-        expect(findClosestEnemyInRange(laser)).toBe(null);
+        expect(findTarget(laser)).toBe(null);
 
         clearEnemies();
         enemyAt(-20 + 90, 0, 0);
-        expect(findClosestEnemyInRange(missile)).not.toBe(null);
+        expect(findTarget(missile)).not.toBe(null);
     });
 });
 

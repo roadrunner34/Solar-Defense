@@ -28,6 +28,7 @@ tests/
 ├── projectile.test.js       # laser vs missile, homing, splash damage
 ├── settings.test.js         # validation, persistence, change notifications
 ├── settings-screen.test.js  # the settings UI and where Back returns to
+├── targeting.test.js        # the four targeting priorities
 ├── textures.test.js         # procedural noise and the headless fallback
 ├── ui.test.js               # HUD and build menu
 ├── upgrade.test.js          # tiers, costs, investment

@@ -19,7 +19,7 @@ import * as THREE from 'three';
 import { scene } from './scene.js';
 import { createHullMaterial } from './materials.js';
 import { CONFIG } from './config.js';
-import { getClosestEnemy } from './enemy.js';
+import { selectTarget, DEFAULT_TARGETING, isTargetingMode } from './targeting.js';
 
 // Shared turret aiming, used by the starbase and every platform
 import { updateTurretAim } from './turret.js';
@@ -46,6 +46,10 @@ let timeSinceLastShot = 0;
 
 // Current target (for smooth tracking)
 let currentTarget = null;
+
+// Which enemy in range the starbase prefers. Defaults to the pre-Sprint-5
+// behaviour, so the starbase acts exactly as it always did until asked not to.
+let targeting = DEFAULT_TARGETING;
 
 // Animation state for visual effects
 let animationTime = 0;
@@ -395,9 +399,12 @@ export function updateStarbase(deltaTime) {
     if (!turret) return null;
     
     // === FIND TARGET ===
-    // Get the closest enemy within range
+    // Whichever enemy in range best matches the chosen priority. The starbase
+    // gets the same control as every platform - it is the single
+    // longest-ranged weapon on the board, so which enemy it picks matters more
+    // than for anything else.
     const starbasePosition = starbase.position;
-    currentTarget = getClosestEnemy(starbasePosition, stats.range);
+    currentTarget = selectTarget(targeting, starbasePosition, stats.range);
     
     // === AUTO-AIM ===
     // If we have a target, rotate to face it. Platforms use the same helper,
@@ -539,8 +546,32 @@ function createMuzzleFlash(position) {
 }
 
 /**
- * Get the starbase's current target
- * @returns {object|null} Current target enemy or null
+ * @returns {string} The starbase's targeting priority
+ */
+export function getStarbaseTargeting() {
+    return targeting;
+}
+
+/**
+ * Change the starbase's targeting priority.
+ *
+ * @param {string} mode - One of TARGETING_MODES
+ * @returns {boolean} True if the mode was valid and applied
+ */
+export function setStarbaseTargeting(mode) {
+    if (!isTargetingMode(mode)) return false;
+
+    targeting = mode;
+
+    // Drop the current target so the change takes effect next frame rather
+    // than after the turret finishes tracking its old one
+    currentTarget = null;
+
+    return true;
+}
+
+/**
+ * @returns {object|null} The enemy the starbase is currently shooting at
  */
 export function getCurrentTarget() {
     return currentTarget;
@@ -583,6 +614,7 @@ export function resetStarbaseStats() {
         starbase.userData.stats = stats;
     }
     currentTarget = null;
+    targeting = DEFAULT_TARGETING; // A new run starts with the default priority
     timeSinceLastShot = 0; // Start each game on a fresh cooldown
     animationTime = 0; // Reset animation time for visual effects
 }

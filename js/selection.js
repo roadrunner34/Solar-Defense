@@ -24,10 +24,13 @@
 import * as THREE from 'three';
 
 import { scene } from './scene.js';
-import { platforms, sellPlatform, getSellValue, createRangeIndicator } from './platform.js';
-import { starbase, getStarbaseStats, upgradeStarbase } from './starbase.js';
+import { platforms, sellPlatform, getSellValue, createRangeIndicator,
+         setPlatformTargeting } from './platform.js';
+import { starbase, getStarbaseStats, upgradeStarbase,
+         getStarbaseTargeting, setStarbaseTargeting } from './starbase.js';
 import { getPlatformConfig, CONFIG } from './config.js';
 import { playSound } from './audio.js';
+import { TARGETING_MODES, TARGETING_LABELS, DEFAULT_TARGETING } from './targeting.js';
 import {
     UPGRADE_STATS,
     describeUpgrades,
@@ -62,7 +65,8 @@ export function initSelection() {
     setSelectionCallbacks({
         onUpgrade: handleUpgrade,
         onSell: handleSell,
-        onClose: clearSelection
+        onClose: clearSelection,
+        onTargeting: handleTargeting
     });
 }
 
@@ -244,7 +248,25 @@ function describePlatform(platform) {
         ],
 
         upgrades: describeUpgrades(platform),
+        targeting: describeTargeting(platform.targeting || DEFAULT_TARGETING),
         sellValue: getSellValue(platform)
+    };
+}
+
+/**
+ * Build the targeting view for the panel.
+ *
+ * Shared by platforms and the starbase, because both choose their own target
+ * and both deserve the same control - the starbase is the longest-ranged weapon
+ * on the board, so which enemy it picks matters more than for anything else.
+ *
+ * @param {string} current - The active mode
+ * @returns {{current: string, modes: Array<{id: string, label: string}>}}
+ */
+function describeTargeting(current) {
+    return {
+        current,
+        modes: TARGETING_MODES.map(id => ({ id, label: TARGETING_LABELS[id] }))
     };
 }
 
@@ -265,6 +287,7 @@ function describeStarbase() {
         ],
 
         upgrades: describeUpgrades(starbaseTarget),
+        targeting: describeTargeting(getStarbaseTargeting()),
 
         // The starbase is the thing being defended. Selling it would be an
         // instant loss dressed up as a refund, so it has no sell value and
@@ -387,6 +410,29 @@ function applyUpgradeVisual(platform) {
     if (accents && accents.material && accents.material.color) {
         accents.material.color.multiplyScalar(1 + totalTiers * 0.06);
     }
+}
+
+/**
+ * Change the selected structure's targeting priority.
+ *
+ * The write-back differs between targets the same way upgrades do - a
+ * platform's priority lives on the platform object, the starbase's behind a
+ * module-scope variable - so the branch is here rather than in targeting.js,
+ * which stays purely about choosing an enemy.
+ *
+ * @param {string} mode - One of TARGETING_MODES
+ */
+function handleTargeting(mode) {
+    if (!selected) return;
+
+    const applied = selected.isStarbase
+        ? setStarbaseTargeting(mode)
+        : setPlatformTargeting(selected, mode);
+
+    if (!applied) return;
+
+    playSound('uiClick');
+    refreshPanel();
 }
 
 /**

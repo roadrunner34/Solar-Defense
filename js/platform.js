@@ -24,7 +24,7 @@ import { scene } from './scene.js';
 import { getUpgradeInvestment } from './upgrade.js';
 import { createHullMaterial } from './materials.js';
 import { getPlatformConfig, CONFIG } from './config.js';
-import { getClosestEnemy } from './enemy.js';
+import { selectTarget, DEFAULT_TARGETING, isTargetingMode } from './targeting.js';
 import { spendCredits, addCredits, canAfford } from './economy.js';
 import { createMuzzleSparks } from './particles.js';
 import { updateTurretAim } from './turret.js';
@@ -585,6 +585,11 @@ export function createPlatform(type, position) {
         timeSinceLastShot: 0,    // Track firing cooldown
         currentTarget: null,     // Currently targeted enemy
 
+        // Which enemy this platform prefers, of those in range. Defaults to the
+        // pre-Sprint-5 behaviour so an untouched platform behaves as it always
+        // did; the selection panel is where it gets changed.
+        targeting: DEFAULT_TARGETING,
+
         // Lifetime statistics, shown in the selection panel. Kills are credited
         // by main.js matching a hit's `source` back to this platform's id.
         shotsFired: 0,
@@ -898,13 +903,41 @@ export function getSellValue(platform) {
 // ==================== COMBAT ====================
 
 /**
- * Finds the closest living enemy inside a platform's range.
+ * Finds the enemy a platform should shoot at.
+ *
+ * Renamed from findClosestEnemyInRange() when targeting priorities arrived -
+ * the old name described the only rule there used to be, and a function called
+ * "closest" that deliberately returns the furthest-along enemy is a trap for
+ * whoever reads it next.
  *
  * @param {object} platform - The platform doing the looking
  * @returns {object|null} The enemy to shoot at, or null if none are in range
  */
-export function findClosestEnemyInRange(platform) {
-    return getClosestEnemy(platform.position, platform.range);
+export function findTarget(platform) {
+    return selectTarget(
+        platform.targeting || DEFAULT_TARGETING,
+        platform.position,
+        platform.range
+    );
+}
+
+/**
+ * Change a platform's targeting priority.
+ *
+ * @param {object} platform
+ * @param {string} mode - One of TARGETING_MODES
+ * @returns {boolean} True if the mode was valid and applied
+ */
+export function setPlatformTargeting(platform, mode) {
+    if (!platform || !isTargetingMode(mode)) return false;
+
+    platform.targeting = mode;
+
+    // Drop the current target so the new priority takes effect on the next
+    // frame rather than after the platform finishes tracking its old one
+    platform.currentTarget = null;
+
+    return true;
 }
 
 /**
@@ -966,7 +999,7 @@ export function updatePlatforms(deltaTime) {
         
         platform.timeSinceLastShot += deltaTime;
         
-        const target = findClosestEnemyInRange(platform);
+        const target = findTarget(platform);
         platform.currentTarget = target;
         
         if (!target) continue;
